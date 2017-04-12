@@ -1,7 +1,5 @@
 # Code taken from:
 # https://raw.githubusercontent.com/Lasagne/Lasagne/master/examples/mnist.py
-__author__ = 'Britefury'
-
 import numpy as np
 import gzip
 
@@ -10,6 +8,7 @@ from . import dataset
 
 def _download_mnist(filename, source='http://yann.lecun.com/exdb/mnist/'):
     return dataset.download_data(filename, source + filename)
+
 
 def _load_mnist_images(filename):
     # Download if necessary
@@ -26,6 +25,7 @@ def _load_mnist_images(filename):
     # provided at http://deeplearning.net/data/mnist/mnist.pkl.gz.)
     return (data / np.float32(256)).astype(np.float32)
 
+
 def _load_mnist_labels(filename):
     # Download if necessary
     path = _download_mnist(filename)
@@ -38,7 +38,8 @@ def _load_mnist_labels(filename):
 
 class MNIST (object):
     def __init__(self, n_val=10000):
-        # We can now download and read the training and test set images and labels.
+        # We can now download and read the training and test set images and
+        # labels.
         train_X = _load_mnist_images('train-images-idx3-ubyte.gz')
         train_y = _load_mnist_labels('train-labels-idx1-ubyte.gz')
         self.test_X = _load_mnist_images('t10k-images-idx3-ubyte.gz')

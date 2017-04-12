@@ -1,2 +1,4 @@
 [run]
-omit = batchup/tests/*
+omit =
+    batchup/tests/*
+    batchup/datasets/*
