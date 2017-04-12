@@ -1,13 +1,11 @@
-__author__ = 'Britefury'
-
 import numpy as np
 from scipy.io import loadmat
-import gzip
 
 from . import dataset
 
 
-def _download_svhn(filename, source='http://ufldl.stanford.edu/housenumbers/'):
+def _download_svhn(filename,
+                   source='http://ufldl.stanford.edu/housenumbers/'):
     return dataset.download_data(filename, source + filename)
 
 

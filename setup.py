@@ -12,6 +12,7 @@ except IOError:
 
 install_requires = [
     'numpy',
+    'scipy',
     'six',
 ]
 

@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 if sys.version_info[0] == 2:
     from urllib import urlretrieve
     from ConfigParser import RawConfigParser
@@ -11,21 +12,25 @@ _DEFAULT_BATCHUP_PATH = os.path.expanduser(os.path.join('~', '.batchup'))
 _DATA_DIR_NAME = 'datasets'
 
 _config__ = None
+_data_dir_path__ = None
+
+
 def get_config():
     global _config__
     if _config__ is None:
         if os.path.exists(_CONFIG_PATH):
             try:
-                _config__ = RawConfigParser.read(_CONFIG_PATH)
-            except:
-                print('batchup: WARNING: error trying to open config file from {}'.format(
-                    _CONFIG_PATH))
+                _config__ = RawConfigParser()
+                _config__.read(_CONFIG_PATH)
+            except Exception as e:
+                print('batchup: WARNING: error {} trying to open config '
+                      'file from {}'.format(e, _CONFIG_PATH))
                 _config__ = RawConfigParser()
         else:
             _config__ = RawConfigParser()
     return _config__
 
-_data_dir_path__ = None
+
 def get_batchup_path():
     global _data_dir_path__
     if _data_dir_path__ is None:
@@ -35,8 +40,9 @@ def get_batchup_path():
             _data_dir_path__ = _DEFAULT_BATCHUP_PATH
         if os.path.exists(_data_dir_path__):
             if not os.path.isdir(_data_dir_path__):
-                raise RuntimeError('batchup: the DATA directory path ({}) is not a '
-                                   'directory'.format(_data_dir_path__))
+                raise RuntimeError(
+                    'batchup: the DATA directory path ({}) is not a '
+                    'directory'.format(_data_dir_path__))
         else:
             os.makedirs(_data_dir_path__)
     return _data_dir_path__
@@ -51,9 +57,12 @@ def download(path, source_url):
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
     if not os.path.exists(path):
+        print('Downloading {} to {}'.format(source_url, path))
         filename = source_url.split('/')[-1]
+
         def _progress(count, block_size, total_size):
-            sys.stdout.write('\rDownloading {} {:.2%}'.format(filename, float(count * block_size) / float(total_size)))
+            sys.stdout.write('\rDownloading {} {:.2%}'.format(
+                filename, float(count * block_size) / float(total_size)))
             sys.stdout.flush()
         urlretrieve(source_url, path, reporthook=_progress)
     return path
