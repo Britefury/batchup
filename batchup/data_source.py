@@ -509,31 +509,40 @@ class ArrayDataSource (AbstractDataSource):
                     if j <= self.length:
                         # Within size of data
                         batch_ndx = indices[i:j]
+                        yield self.samples_by_indices(batch_ndx)
                         i = j
                     else:
-                        # Reduce the number of remaining epochs
-                        epochs = epochs - 1 if epochs != -1 else -1
-                        if epochs == 0:
-                            # Finished; emit remaining elements
-                            if i < self.length:
-                                batch_ndx = indices[i:self.length]
-                                yield self.samples_by_indices(batch_ndx)
-                            break
-
-                        # Wrap over
-                        # Compute number of elements required to make up the
-                        # batch
-                        k = batch_size - (self.length - i)
-                        # Get available indices
-                        batch_ndx = indices[i:self.length]
+                        # Multiple restarts required to fill the batch
+                        batch_ndx = indices[i:]
+                        # Loop over; new permutation
                         if self.indices is not None:
                             indices = shuffle.permutation(self.indices)
                         else:
                             indices = shuffle.permutation(self.length)
-                        # Get remaining indices and append
-                        batch_ndx = np.append(batch_ndx, indices[:k], axis=0)
-                        i = k
-                    yield self.samples_by_indices(batch_ndx)
+                        i = 0
+                        while batch_ndx.shape[0] < batch_size:
+                            # Reduce the number of remaining epochs
+                            epochs = epochs - 1 if epochs != -1 else -1
+                            if epochs == 0:
+                                break
+
+                            # Wrap over
+                            k = min(batch_size - batch_ndx.shape[0],
+                                    self.length)
+                            batch_ndx = np.append(
+                                batch_ndx, indices[:k], axis=0)
+                            i += k
+                            if i == self.length:
+                                # Loop over; new permutation
+                                if self.indices is not None:
+                                    indices = shuffle.permutation(self.indices)
+                                else:
+                                    indices = shuffle.permutation(self.length)
+                                i = 0
+
+                        yield self.samples_by_indices(batch_ndx)
+                        if epochs == 0:
+                            break
             else:
                 if self.indices is not None:
                     i = 0
@@ -542,26 +551,30 @@ class ArrayDataSource (AbstractDataSource):
                         if j <= self.length:
                             # Within size of data
                             batch_ndx = self.indices[i:j]
+                            yield self.samples_by_indices(batch_ndx)
                             i = j
                         else:
-                            # Reduce the number of remaining epochs
-                            epochs = epochs - 1 if epochs != -1 else -1
-                            if epochs == 0:
-                                # Finished; emit remaining elements
-                                if i < self.length:
-                                    batch_ndx = self.indices[i:self.length]
-                                    yield self.samples_by_indices(batch_ndx)
-                                break
+                            # Multiple restarts required to fill the batch
+                            batch_ndx = self.indices[i:]
+                            i = 0
+                            while batch_ndx.shape[0] < batch_size:
+                                # Reduce the number of remaining epochs
+                                epochs = epochs - 1 if epochs != -1 else -1
+                                if epochs == 0:
+                                    break
 
-                            # Wrap over
-                            # Compute number of elements required to make up
-                            # the batch
-                            k = batch_size - (self.length - i)
-                            batch_ndx = np.append(self.indices[i:self.length],
-                                                  self.indices[:k],
-                                                  axis=0)
-                            i = k
-                        yield self.samples_by_indices(batch_ndx)
+                                # Wrap over
+                                k = min(batch_size - batch_ndx.shape[0],
+                                        self.length)
+                                batch_ndx = np.append(
+                                    batch_ndx, self.indices[:k], axis=0)
+                                i += k
+                                if i == self.length:
+                                    i = 0
+
+                            yield self.samples_by_indices(batch_ndx)
+                            if epochs == 0:
+                                break
                 else:
                     i = 0
                     while True:
@@ -570,7 +583,8 @@ class ArrayDataSource (AbstractDataSource):
                             # Within size of data
                             yield self.samples_by_indices(slice(i, j))
                             i = j
-                        else:
+                        elif j <= self.length * 2:
+                            # One restart is required
                             # Reduce the number of remaining epochs
                             epochs = epochs - 1 if epochs != -1 else -1
                             if epochs == 0:
@@ -587,6 +601,28 @@ class ArrayDataSource (AbstractDataSource):
                             yield [np.append(d[i:self.length], d[:k], axis=0)
                                    for d in self.data]
                             i = k
+                        else:
+                            # Multiple restarts required to fill the batch
+                            batch_ndx = np.arange(i, self.length)
+                            i = 0
+                            while batch_ndx.shape[0] < batch_size:
+                                # Reduce the number of remaining epochs
+                                epochs = epochs - 1 if epochs != -1 else -1
+                                if epochs == 0:
+                                    break
+
+                                # Wrap over
+                                k = min(batch_size - batch_ndx.shape[0],
+                                        self.length)
+                                batch_ndx = np.append(
+                                    batch_ndx, np.arange(0, k), axis=0)
+                                i += k
+                                if i == self.length:
+                                    i = 0
+
+                            yield self.samples_by_indices(batch_ndx)
+                            if epochs == 0:
+                                break
 
     def samples_by_indices(self, indices):
         """

@@ -147,7 +147,7 @@ def test_ArrayDataSource():
     assert (batches[2][0] == X[order[30:]]).all()
     assert (batches[2][1] == Y[order[30:]]).all()
 
-    # Check that shuffle=True uses Lasagne's default RNG
+    # Check that shuffle=True uses NumPy's default RNG
     np.random.seed(12345)
     batches = list(ads.batch_iterator(batch_size=15, shuffle=True))
     # Get the expected order
@@ -372,6 +372,93 @@ def test_ArrayDataSource_indices_repeated():
     order = np.append(order_shuffle_rng.permutation(indices),
                       order_shuffle_rng.permutation(indices), axis=0)
     check_batches(batches, 5, order)
+
+
+def test_ArrayDataSource_repeated_small_dataset():
+    from batchup import data_source
+
+    X = np.arange(20)
+    Y = np.arange(40).reshape((20, 2))
+
+    # Helper function for checking the resulting mini-batches
+    def check_batches(batches, expected_n, order, batch_size):
+        # Eight batches
+        assert len(batches) == expected_n
+        # Verify contents
+        for batch_i, batch in enumerate(batches):
+            # Two items in each batch
+            assert len(batch) == 2
+            # Compute and wrap start and end indices
+            start = batch_i * batch_size
+            end = start + batch_size
+            # Get the indices of the expected samples from the `order` array
+            batch_order = order[start:end]
+            # Verify values
+            assert batch[0].shape[0] == batch_order.shape[0]
+            assert batch[1].shape[0] == batch_order.shape[0]
+            assert (batch[0] == X[batch_order]).all()
+            assert (batch[1] == Y[batch_order]).all()
+
+    # Infinite repetitions; take 10 in-order batches of 64 samples each
+    ads_inf = data_source.ArrayDataSource([X, Y], epochs=-1)
+    inorder_iter = ads_inf.batch_iterator(batch_size=64)
+    batches = [next(inorder_iter) for i in range(10)]
+    order = np.concatenate([np.arange(20)] * 32, axis=0)
+    check_batches(batches, 10, order, 64)
+
+    # Infinite repetitions; take 10 shuffled batches
+    shuffled_iter = ads_inf.batch_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = [next(shuffled_iter) for i in range(10)]
+    # Get the expected order
+    order_shuffle_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_shuffle_rng.permutation(20)
+                            for _ in range(32)], axis=0)
+    check_batches(batches, 10, order, 64)
+
+
+def test_ArrayDataSource_indices_repeated_small_dataset():
+    from batchup import data_source
+
+    X = np.arange(20)
+    Y = np.arange(40).reshape((20, 2))
+    indices = np.random.permutation(20)[:10]
+
+    # Helper function for checking the resulting mini-batches
+    def check_batches(batches, expected_n, order, batch_size):
+        # Eight batches
+        assert len(batches) == expected_n
+        # Verify contents
+        for batch_i, batch in enumerate(batches):
+            # Two items in each batch
+            assert len(batch) == 2
+            # Compute and wrap start and end indices
+            start = batch_i * batch_size
+            end = start + batch_size
+            # Get the indices of the expected samples from the `order` array
+            batch_order = order[start:end]
+            # Verify values
+            assert batch[0].shape[0] == batch_order.shape[0]
+            assert batch[1].shape[0] == batch_order.shape[0]
+            assert (batch[0] == X[batch_order]).all()
+            assert (batch[1] == Y[batch_order]).all()
+
+    # Infinite repetitions; take 10 in-order batches
+    ads_inf = data_source.ArrayDataSource([X, Y], indices=indices, epochs=-1)
+    inorder_iter = ads_inf.batch_iterator(batch_size=64)
+    batches = [next(inorder_iter) for i in range(10)]
+    order = np.concatenate([indices] * 64, axis=0)
+    check_batches(batches, 10, order, 64)
+
+    # Infinite repetitions; take 10 shuffled batches
+    shuffled_iter = ads_inf.batch_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = [next(shuffled_iter) for i in range(10)]
+    # Compute the expected order
+    order_shuffle_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_shuffle_rng.permutation(indices)
+                            for _ in range(64)], axis=0)
+    check_batches(batches, 10, order, 64)
 
 
 def test_CallableDataSource():
