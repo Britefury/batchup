@@ -91,6 +91,20 @@ def _trim_batch(batch, length):
 class AbstractDataSource (object):
     """Data source abstract base class
     """
+    @property
+    def is_random_access(self):
+        """
+        Determine if this data source is 'random access'.
+        If so, the `samples_by_indices_nomapping` and
+        `batch_indices_iterator` methods will be available
+
+        Returns
+        -------
+        bool
+            `True` if random access
+        """
+        return False
+
     def num_samples(self, **kwargs):
         """
         Get the number of samples in this data source. Returns
@@ -308,7 +322,334 @@ class AbstractDataSource (object):
             return shuffle
 
 
-class ArrayDataSource (AbstractDataSource):
+class RandomAccessDataSource (AbstractDataSource):
+    """Random access data source abstract base class
+
+    Attributes
+    ----------
+    length: int
+        The number of samples available (will be the same length as the
+        `indices` array if available
+    indices: NumPy array, 1D dtype=int or None
+        An array of indices that identify the subset of samples drawn
+        from data that are to be used
+    epochs: int (default=1)
+        The number of repetitions, or `-1` for infinite. A value of 0 or
+        a negative value that is not -1 will cause `ValueError` to be
+        raised.
+
+    """
+    def __init__(self, length, indices=None, epochs=1):
+        """
+        Constructor for random access data source
+
+        Parameters
+        ----------
+        length: int
+            The number of total samples available
+        indices: NumPy array, 1D dtype=int or None
+            An array of indices that identify the subset of samples drawn
+            from data that are to be used
+        epochs: int (default=1)
+            The number of repetitions, or `-1` for infinite. A value of 0 or
+            a negative value that is not -1 will cause `ValueError` to be
+            raised.
+        """
+        if epochs == 0 or epochs < -1:
+            raise ValueError('Invalid number of epochs; should be >= 1 or '
+                             '-1, not {}'.format(epochs))
+        self.indices = indices
+        self.epochs = epochs
+        if self.indices is not None:
+            # The number of samples is the size of `indices`
+            self.length = len(self.indices)
+        else:
+            # Get the length from the first array
+            self.length = length
+
+    @property
+    def is_random_access(self):
+        """
+        Determine if this data source is 'random access'.
+        If so, the `samples_by_indices_nomapping` and
+        `batch_indices_iterator` methods will be available
+
+        Returns
+        -------
+        bool
+            `True` if random access
+        """
+        return True
+
+    def num_samples(self, **kwargs):
+        """
+        Get the number of samples in this data source.
+
+        Returns
+        -------
+        int or `np.inf`
+            If `epochs` is `-1`, `np.inf`.
+            Otherwise, the length of the data set multiplied by the value of
+            `self.epochs`. The length of the data set is the value of the
+            `length` parameter passed to the constructor, or the length of
+            the indices array if provided.
+        """
+        if self.epochs == -1:
+            return np.inf
+        else:
+            return self.length * self.epochs
+
+    def samples_by_indices_nomapping(self, indices):
+        """
+        Gather a batch of samples by indices *without* applying any index
+        mapping resulting from the (optional) use of the `indices` array
+        passed to the constructor.
+
+        Parameters
+        ----------
+        indices: 1D-array of ints or slice
+            The samples to retrieve
+
+        Returns
+        -------
+        list of arrays
+            A mini-batch in the form of a list of NumPy arrays
+        """
+        raise NotImplementedError
+
+    def samples_by_indices(self, indices):
+        """
+        Gather a batch of samples by indices, applying the mapping
+        described by the (optional) `indices` array passed to the
+        constructor.
+
+        Parameters
+        ----------
+        indices: 1D-array of ints or slice
+            The samples to retrieve
+
+        Returns
+        -------
+        list of arrays
+            A mini-batch in the form of a list of NumPy arrays
+        """
+        if self.indices is not None:
+            indices = self.indices[indices]
+        return self.samples_by_indices_nomapping(indices)
+
+    def batch_indices_iterator(self, batch_size, shuffle=None, **kwargs):
+        """
+        Create an iterator that generates mini-batch sample indices.
+        The batches will have `batch_size` elements, with the exception
+        of the final batch which will have less if there are insufficient
+        elements left to make a complete batch.
+
+        If `shuffle` is `None` or `False` elements will be extracted in
+        order. If it is a `numpy.random.RandomState`, it will be used to
+        randomise the order in which elements are extracted from the data.
+        If it is `True`, NumPy's default random number generator will be
+        use to shuffle elements.
+
+        If an array of indices was provided to the constructor, the subset of
+        samples identified in that array is used, rather than the complete
+        set of samples.
+
+        The generated mini-batches indices take the form of either:
+        - 1D NumPy integer arrays
+        - slices
+
+        Parameters
+        ----------
+        batch_size: int
+            Mini-batch size
+        shuffle: `numpy.random.RandomState` or `True` or `None`
+            Used to randomise element order. If `None`, elements will be
+            extracted in order. If it is a `RandomState` instance, that
+            RNG will be used to shuffle elements. If it is `True`, Lasagne's
+            default RNG will be used.
+
+        Returns
+        -------
+        iterator
+            An iterator that generates items that are either slices or
+            1D NumPy integer arrays.
+        """
+        shuffle = self._get_shuffle_rng(shuffle)
+        if self.epochs == 1:
+            if shuffle is not None:
+                if self.indices is not None:
+                    indices = shuffle.permutation(self.indices)
+                else:
+                    indices = shuffle.permutation(self.length)
+                for i in range(0, self.length, batch_size):
+                    yield indices[i:i + batch_size]
+            else:
+                if self.indices is not None:
+                    for i in range(0, self.length, batch_size):
+                        yield self.indices[i:i + batch_size]
+                else:
+                    for i in range(0, self.length, batch_size):
+                        yield slice(i, i + batch_size)
+        else:
+            epochs = self.epochs
+            if shuffle is not None:
+                if self.indices is not None:
+                    indices = shuffle.permutation(self.indices)
+                else:
+                    indices = shuffle.permutation(self.length)
+                i = 0
+                while True:
+                    j = i + batch_size
+                    if j <= self.length:
+                        # Within size of data
+                        yield indices[i:j]
+                        i = j
+                    else:
+                        # Multiple restarts required to fill the batch
+                        batch_ndx = np.arange(0)
+                        while batch_ndx.shape[0] < batch_size:
+                            # Wrap over
+                            k = min(batch_size - batch_ndx.shape[0],
+                                    self.length - i)
+                            batch_ndx = np.append(
+                                batch_ndx, indices[i:i + k], axis=0)
+                            i += k
+
+                            if i >= self.length:
+                                # Loop over; new permutation
+                                if self.indices is not None:
+                                    indices = shuffle.permutation(self.indices)
+                                else:
+                                    indices = shuffle.permutation(self.length)
+                                i -= self.length
+                                # Reduce the number of remaining epochs
+                                epochs = epochs - 1 if epochs != -1 else -1
+                                if epochs == 0:
+                                    break
+
+                        if batch_ndx.shape[0] > 0:
+                            yield batch_ndx
+                        if epochs == 0:
+                            break
+            else:
+                if self.indices is not None:
+                    i = 0
+                    while True:
+                        j = i + batch_size
+                        if j <= self.length:
+                            # Within size of data
+                            yield self.indices[i:j]
+                            i = j
+                        else:
+                            # Multiple restarts required to fill the batch
+                            batch_ndx = np.arange(0)
+                            while batch_ndx.shape[0] < batch_size:
+                                # Wrap over
+                                k = min(batch_size - batch_ndx.shape[0],
+                                        self.length - i)
+                                batch_ndx = np.append(
+                                    batch_ndx, self.indices[i:i + k], axis=0)
+                                i += k
+                                if i >= self.length:
+                                    i -= self.length
+                                    # Reduce the number of remaining epochs
+                                    epochs = epochs - 1 if epochs != -1 else -1
+                                    if epochs == 0:
+                                        break
+
+                            if batch_ndx.shape[0] > 0:
+                                yield batch_ndx
+                            if epochs == 0:
+                                break
+                else:
+                    i = 0
+                    while True:
+                        j = i + batch_size
+                        if j <= self.length:
+                            # Within size of data
+                            yield slice(i, j)
+                            i = j
+                        elif j <= self.length * 2:
+                            # One restart is required
+                            # Reduce the number of remaining epochs
+                            epochs = epochs - 1 if epochs != -1 else -1
+                            if epochs == 0:
+                                # Finished; emit remaining elements
+                                if i < self.length:
+                                    yield slice(i, self.length)
+                                break
+
+                            # Wrap over
+                            # Compute number of elements required to make up
+                            # the batch
+                            k = batch_size - (self.length - i)
+                            yield np.append(np.arange(i, self.length),
+                                            np.arange(0, k), axis=0)
+                            i = k
+                        else:
+                            # Multiple restarts required to fill the batch
+                            batch_ndx = np.arange(0)
+                            # i = 0
+                            while batch_ndx.shape[0] < batch_size:
+                                # Wrap over
+                                k = min(batch_size - batch_ndx.shape[0],
+                                        self.length - i)
+                                batch_ndx = np.append(
+                                    batch_ndx, np.arange(i, i + k), axis=0)
+                                i += k
+                                if i >= self.length:
+                                    i -= self.length
+                                    # Reduce the number of remaining epochs
+                                    epochs = epochs - 1 if epochs != -1 else -1
+                                    if epochs == 0:
+                                        break
+
+                            if batch_ndx.shape[0] > 0:
+                                yield batch_ndx
+                            if epochs == 0:
+                                break
+
+    def batch_iterator(self, batch_size, shuffle=None, **kwargs):
+        """
+        Create an iterator that generates mini-batches extracted from
+        this data source. The batches will have `batch_size` elements, with
+        the exception of the final batch which  will have less if there are
+        insufficient elements left to make a complete batch.
+
+        If `shuffle` is `None` or `False` elements will be extracted in
+        order. If it is a `numpy.random.RandomState`, it will be used to
+        randomise the order in which elements are extracted from the data.
+        If it is `True`, Lasagne's default random number generator will be
+        use to shuffle elements.
+
+        If an array of indices was provided to the constructor, the subset of
+        samples identified in that array is used, rather than the complete
+        set of samples.
+
+        The generated mini-batches take the form `[batch_x, batch_y, ...]`.
+
+        Parameters
+        ----------
+        batch_size: int
+            Mini-batch size
+        shuffle: `numpy.random.RandomState` or `True` or `None`
+            Used to randomise element order. If `None`, elements will be
+            extracted in order. If it is a `RandomState` instance, that
+            RNG will be used to shuffle elements. If it is `True`, Lasagne's
+            default RNG will be used.
+
+        Returns
+        -------
+        iterator
+            An iterator that generates items of type `[batch_x, batch_y, ...]`
+            where `batch_x`, `batch_y`, etc are themselves arrays.
+        """
+        for batch_ndx in self.batch_indices_iterator(
+                batch_size, shuffle=shuffle, **kwargs):
+            yield self.samples_by_indices_nomapping(batch_ndx)
+
+
+class ArrayDataSource (RandomAccessDataSource):
     """A data source whose data comes from NumPy arrays (or array-like
     objects. Invoke the :meth:`batch_iterator` method to create an iterator
     that generates mini-batches extracted from the arrays
@@ -396,238 +737,27 @@ class ArrayDataSource (AbstractDataSource):
         if not isinstance(data, list):
             raise TypeError('data must be a list of array-like objects, not '
                             'a {}'.format(type(data)))
-        if epochs == 0 or epochs < -1:
-            raise ValueError('Invalid number of epochs; should be >= 1 or '
-                             '-1, not {}'.format(epochs))
+
+        # Get the length from the first array
+        length = len(data[0])
+        # Ensure that rest of the arrays have the same length
+        for i, d1 in enumerate(data[1:]):
+            if len(d1) != length:
+                raise ValueError(
+                    'Arrays have inconsistent length; array 0 has '
+                    'length {}, while array {} has length {}'.format(
+                        length, i + 1, len(d1)))
+
         self.data = data
-        self.indices = indices
-        self.epochs = epochs
-        if self.indices is not None:
-            self.length = len(self.indices)
-        else:
-            # Get the length from the first array
-            self.length = len(data[0])
-            # Ensure that rest of the arrays have the same length
-            for i, d1 in enumerate(data[1:]):
-                if len(d1) != self.length:
-                    raise ValueError(
-                        'Arrays have inconsistent length; array 0 has '
-                        'length {}, while array {} has length {}'.format(
-                            self.length, i+1, len(d1)))
 
-    def num_samples(self, **kwargs):
+        super(ArrayDataSource, self).__init__(
+            length, indices=indices, epochs=epochs)
+
+    def samples_by_indices_nomapping(self, indices):
         """
-        Get the number of samples in this data source.
-
-        Parameters
-        ----------
-        epochs: int
-            The number of repetitions, or `-1` for infinite, in which case
-            `np.inf` will be returned. A value of 0 or a negative value that
-            is not -1 will cause `ValueError` to be raised.
-
-        Returns
-        -------
-        int or `np.inf`
-            If `epochs` is `-1`, `np.inf`.
-            Otherwise, the length of the data set multiplied by the value of
-            `epochs. The length of the data set is the length of the
-            indices array - if one was provided to the constructor - or the
-            length of the arrays passed in the list `data`.
-        """
-        if self.epochs == -1:
-            return np.inf
-        else:
-            return self.length * self.epochs
-
-    def batch_iterator(self, batch_size, shuffle=None, **kwargs):
-        """
-        Create an iterator that generates mini-batches extracted from the
-        arrays that make up this dataset. The batches will have `batchsize`
-        elements, with the exception of the final batch which will have less
-        if there are insufficient elements left to make a complete batch.
-
-        If `shuffle` is `None` or `False` elements will be extracted in
-        order. If it is a `numpy.random.RandomState`, it will be used to
-        randomise the order in which elements are extracted from the data.
-        If it is `True`, Lasagne's default random number generator will be
-        use to shuffle elements.
-
-        If an array of indices was provided to the constructor, the subset of
-        samples identified in that array is used, rather than the complete
-        set of samples.
-
-        The generated mini-batches take the form `[batch_x, batch_y, ...]`
-        where `batch_x`, `batch_y`, etc. are extracted from each array that
-        is a part of `self`.
-
-        Parameters
-        ----------
-        batch_size: int
-            Mini-batch size
-        shuffle: `numpy.random.RandomState` or `True` or `None`
-            Used to randomise element order. If `None`, elements will be
-            extracted in order. If it is a `RandomState` instance, that
-            RNG will be used to shuffle elements. If it is `True`, Lasagne's
-            default RNG will be used.
-
-        Returns
-        -------
-        iterator
-            An iterator that generates items of type `[batch_x, batch_y, ...]`
-            where `batch_x`, `batch_y`, etc are themselves arrays.
-        """
-        shuffle = self._get_shuffle_rng(shuffle)
-        if self.epochs == 1:
-            if shuffle is not None:
-                if self.indices is not None:
-                    indices = shuffle.permutation(self.indices)
-                else:
-                    indices = shuffle.permutation(self.length)
-                for i in range(0, self.length, batch_size):
-                    excerpt = indices[i:i + batch_size]
-                    yield self.samples_by_indices(excerpt)
-            else:
-                if self.indices is not None:
-                    for i in range(0, self.length, batch_size):
-                        batch_ndx = self.indices[i:i + batch_size]
-                        yield self.samples_by_indices(batch_ndx)
-                else:
-                    for i in range(0, self.length, batch_size):
-                        yield self.samples_by_indices(
-                            slice(i, i + batch_size))
-        else:
-            epochs = self.epochs
-            if shuffle is not None:
-                if self.indices is not None:
-                    indices = shuffle.permutation(self.indices)
-                else:
-                    indices = shuffle.permutation(self.length)
-                i = 0
-                while True:
-                    j = i + batch_size
-                    if j <= self.length:
-                        # Within size of data
-                        batch_ndx = indices[i:j]
-                        yield self.samples_by_indices(batch_ndx)
-                        i = j
-                    else:
-                        # Multiple restarts required to fill the batch
-                        batch_ndx = indices[i:]
-                        # Loop over; new permutation
-                        if self.indices is not None:
-                            indices = shuffle.permutation(self.indices)
-                        else:
-                            indices = shuffle.permutation(self.length)
-                        i = 0
-                        while batch_ndx.shape[0] < batch_size:
-                            # Reduce the number of remaining epochs
-                            epochs = epochs - 1 if epochs != -1 else -1
-                            if epochs == 0:
-                                break
-
-                            # Wrap over
-                            k = min(batch_size - batch_ndx.shape[0],
-                                    self.length)
-                            batch_ndx = np.append(
-                                batch_ndx, indices[:k], axis=0)
-                            i += k
-                            if i == self.length:
-                                # Loop over; new permutation
-                                if self.indices is not None:
-                                    indices = shuffle.permutation(self.indices)
-                                else:
-                                    indices = shuffle.permutation(self.length)
-                                i = 0
-
-                        yield self.samples_by_indices(batch_ndx)
-                        if epochs == 0:
-                            break
-            else:
-                if self.indices is not None:
-                    i = 0
-                    while True:
-                        j = i + batch_size
-                        if j <= self.length:
-                            # Within size of data
-                            batch_ndx = self.indices[i:j]
-                            yield self.samples_by_indices(batch_ndx)
-                            i = j
-                        else:
-                            # Multiple restarts required to fill the batch
-                            batch_ndx = self.indices[i:]
-                            i = 0
-                            while batch_ndx.shape[0] < batch_size:
-                                # Reduce the number of remaining epochs
-                                epochs = epochs - 1 if epochs != -1 else -1
-                                if epochs == 0:
-                                    break
-
-                                # Wrap over
-                                k = min(batch_size - batch_ndx.shape[0],
-                                        self.length)
-                                batch_ndx = np.append(
-                                    batch_ndx, self.indices[:k], axis=0)
-                                i += k
-                                if i == self.length:
-                                    i = 0
-
-                            yield self.samples_by_indices(batch_ndx)
-                            if epochs == 0:
-                                break
-                else:
-                    i = 0
-                    while True:
-                        j = i + batch_size
-                        if j <= self.length:
-                            # Within size of data
-                            yield self.samples_by_indices(slice(i, j))
-                            i = j
-                        elif j <= self.length * 2:
-                            # One restart is required
-                            # Reduce the number of remaining epochs
-                            epochs = epochs - 1 if epochs != -1 else -1
-                            if epochs == 0:
-                                # Finished; emit remaining elements
-                                if i < self.length:
-                                    yield self.samples_by_indices(
-                                        slice(i, self.length))
-                                break
-
-                            # Wrap over
-                            # Compute number of elements required to make up
-                            # the batch
-                            k = batch_size - (self.length - i)
-                            yield [np.append(d[i:self.length], d[:k], axis=0)
-                                   for d in self.data]
-                            i = k
-                        else:
-                            # Multiple restarts required to fill the batch
-                            batch_ndx = np.arange(i, self.length)
-                            i = 0
-                            while batch_ndx.shape[0] < batch_size:
-                                # Reduce the number of remaining epochs
-                                epochs = epochs - 1 if epochs != -1 else -1
-                                if epochs == 0:
-                                    break
-
-                                # Wrap over
-                                k = min(batch_size - batch_ndx.shape[0],
-                                        self.length)
-                                batch_ndx = np.append(
-                                    batch_ndx, np.arange(0, k), axis=0)
-                                i += k
-                                if i == self.length:
-                                    i = 0
-
-                            yield self.samples_by_indices(batch_ndx)
-                            if epochs == 0:
-                                break
-
-    def samples_by_indices(self, indices):
-        """
-        Gather a batch of samples by indices, where `indices` can either be
-        a NumPy array of indices or a slice.
+        Gather a batch of samples by indices *without* applying any index
+        mapping resulting from the (optional) use of the `indices` array
+        passed to the constructor.
 
         Parameters
         ----------
@@ -682,7 +812,7 @@ class CallableDataSource (AbstractDataSource):
     ...     return X.shape[0]
 
     >>> ds = CallableDataSource(make_batch_iterator, num_samples_fn)
-    >>> ds.num_samples()
+    >>> int(ds.num_samples())
     7
 
     Or, we could provide the number of samples:
@@ -876,30 +1006,149 @@ class CompositeDataSource (AbstractDataSource):
     def __init__(self, datasets, flatten=True):
         self.datasets = datasets
         self.flatten = flatten
+        self._random_access = True
+        for ds in datasets:
+            if not ds.is_random_access:
+                self._random_access = False
+
+    def _prepare_batch(self, batch):
+        # Get the lengths of all the sub-batches
+        sub_lens = [_length_of_batch(sub_batch) for sub_batch in batch]
+        # Get the minimum length
+        trim_len = min(sub_lens)
+        # If its not the same as the maximum length, we need to trim
+        if trim_len != max(sub_lens):
+            batch = _trim_batch(batch, trim_len)
+
+        if self.flatten:
+            return sum(batch, [])
+        else:
+            return list(batch)
+
+    def _prepare_index_batch(self, batch):
+        # Get the lengths of all the sub-batches
+        sub_lens = [_length_of_batch(sub_batch) for sub_batch in batch]
+        # Get the minimum length
+        trim_len = min(sub_lens)
+        # If its not the same as the maximum length, we need to trim
+        if trim_len != max(sub_lens):
+            batch = _trim_batch(batch, trim_len)
+        return batch
+
+    @property
+    def is_random_access(self):
+        """
+        Determine if this data source is 'random access'.
+        If so, the `samples_by_indices_nomapping` and
+        `batch_indices_iterator` methods will be available
+
+        Returns
+        -------
+        bool
+            `True` if random access
+        """
+        return self._random_access
 
     def num_samples(self, **kwargs):
         return min([d.num_samples(**kwargs) for d in self.datasets])
 
-    def batch_iterator(self, batch_size, flatten=None, **kwargs):
-        iterators = [d.batch_iterator(batch_size, flatten=flatten, **kwargs)
+    def batch_iterator(self, batch_size, **kwargs):
+        iterators = [d.batch_iterator(batch_size, **kwargs)
                      for d in self.datasets]
 
         for batch in six.moves.zip(*iterators):
-            # Get the lengths of all the sub-batches
-            sub_lens = [_length_of_batch(sub_batch) for sub_batch in batch]
-            # Get the minimum length
-            trim_len = min(sub_lens)
-            # If its not the same as the maximum length, we need to trim
-            if trim_len != max(sub_lens):
-                batch = _trim_batch(batch, trim_len)
+            yield self._prepare_batch(batch)
 
-            if flatten is None:
-                flatten = self.flatten
+    def samples_by_indices_nomapping(self, indices):
+        """
+        Gather a batch of samples by indices *without* applying any index
+        mapping.
 
-            if flatten:
-                yield sum(batch, [])
-            else:
-                yield list(batch)
+        Parameters
+        ----------
+        indices: list of either 1D-array of ints or slice
+            A list of index arrays or slices; one for each data source
+            that identify the samples to access
+
+        Returns
+        -------
+        nested list of arrays
+            A mini-batch
+        """
+        if not self._random_access:
+            raise TypeError('samples_by_indices_nomapping method not '
+                            'supported as one or more of the underlying '
+                            'data sources does not support random access')
+        if len(indices) != len(self.datasets):
+            raise ValueError(
+                'length mis-match: indices has {} items, self has {} data '
+                'sources, should be equal'.format(len(indices),
+                                                  len(self.datasets)))
+        batch = [ds.samples_by_indices_nomapping(ndx)
+                 for ds, ndx in zip(self.datasets, indices)]
+        return self._prepare_batch(batch)
+
+    def samples_by_indices(self, indices):
+        """
+        Gather a batch of samples by indices, applying any index
+        mapping defined by the underlying data sources.
+
+        Parameters
+        ----------
+        indices: list of either 1D-array of ints or slice
+            A list of index arrays or slices; one for each data source
+            that identify the samples to access
+
+        Returns
+        -------
+        nested list of arrays
+            A mini-batch
+        """
+        if not self._random_access:
+            raise TypeError('samples_by_indices method not supported as one '
+                            'or more of the underlying data sources does '
+                            'not support random access')
+        if len(indices) != len(self.datasets):
+            raise ValueError(
+                'length mis-match: indices has {} items, self has {} data '
+                'sources, should be equal'.format(len(indices),
+                                                  len(self.datasets)))
+        batch = [ds.samples_by_indices_nomapping(ndx)
+                 for ds, ndx in zip(self.datasets, indices)]
+        return self._prepare_batch(batch)
+
+    def batch_indices_iterator(self, batch_size, **kwargs):
+        """
+        Create an iterator that generates mini-batch sample indices
+
+        The generated mini-batches indices take the form of nested lists of
+        either:
+        - 1D NumPy integer arrays
+        - slices
+
+        The list nesting structure with match that of the tree of data sources
+        rooted at `self`
+
+        Parameters
+        ----------
+        batch_size: int
+            Mini-batch size
+
+        Returns
+        -------
+        iterator
+            An iterator that generates items that are nested lists of slices
+            or 1D NumPy integer arrays.
+        """
+        if not self._random_access:
+            raise TypeError('batch_indices_iterator method not supported as '
+                            'one or more of the underlying data sources '
+                            'does not support random access')
+        iterators = [d.batch_indices_iterator(batch_size, **kwargs)
+                     for d in self.datasets]
+
+        for batch in six.moves.zip(*iterators):
+            yield self._prepare_index_batch(batch)
 
 
 def batch_map(func, batch_iter, progress_iter_func=None,

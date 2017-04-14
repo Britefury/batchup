@@ -72,11 +72,328 @@ def test_AbstractDataSource():
 
     ds = data_source.AbstractDataSource()
 
+    assert not ds.is_random_access
+
     with pytest.raises(NotImplementedError):
         _ = ds.num_samples()
 
     with pytest.raises(NotImplementedError):
         ds.batch_iterator(256)
+
+
+def test_RandomAccessDataSource():
+    from batchup import data_source
+
+    ds = data_source.RandomAccessDataSource(length=10)
+
+    assert ds.is_random_access
+
+    # `samples_by_indices_nomapping` should be abstract
+    with pytest.raises(NotImplementedError):
+        _ = ds.samples_by_indices_nomapping(slice(None))
+
+    # Test index generation
+
+    # In order
+    ndx_iter = ds.batch_indices_iterator(batch_size=5)
+    all = np.arange(10)
+    batches = list(ndx_iter)
+    assert len(batches) == 2
+    assert (all[batches[0]] == np.arange(0, 5)).all()
+    assert (all[batches[1]] == np.arange(5, 10)).all()
+
+    # In order, last batch short
+    ndx_iter = ds.batch_indices_iterator(batch_size=6)
+    all = np.arange(10)
+    batches = list(ndx_iter)
+    assert len(batches) == 2
+    assert (all[batches[0]] == np.arange(0, 6)).all()
+    assert (all[batches[1]] == np.arange(6, 10)).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds.batch_indices_iterator(
+        batch_size=5, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order = np.random.RandomState(12345).permutation(10)
+    assert len(batches) == 2
+    assert (all[batches[0]] == order[0:5]).all()
+    assert (all[batches[1]] == order[5:10]).all()
+
+    # Shuffled, last batch short
+    shuffled_ndx_iter = ds.batch_indices_iterator(
+        batch_size=6, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order = np.random.RandomState(12345).permutation(10)
+    assert len(batches) == 2
+    assert (all[batches[0]] == order[0:6]).all()
+    assert (all[batches[1]] == order[6:10]).all()
+
+
+def test_RandomAccessDataSource_indices():
+    from batchup import data_source
+
+    indices = np.random.RandomState(12345).permutation(20)[:10]
+    ds = data_source.RandomAccessDataSource(length=20, indices=indices)
+
+    # Test index generation
+
+    # In order
+    ndx_iter = ds.batch_indices_iterator(batch_size=5)
+    all = np.arange(20)
+    batches = list(ndx_iter)
+    assert len(batches) == 2
+    assert (all[batches[0]] == indices[0:5]).all()
+    assert (all[batches[1]] == indices[5:10]).all()
+
+    # In order, last batch short
+    ndx_iter = ds.batch_indices_iterator(batch_size=6)
+    all = np.arange(20)
+    batches = list(ndx_iter)
+    assert len(batches) == 2
+    assert (all[batches[0]] == indices[0:6]).all()
+    assert (all[batches[1]] == indices[6:10]).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds.batch_indices_iterator(
+        batch_size=5, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order = np.random.RandomState(12345).permutation(10)
+    assert len(batches) == 2
+    assert (all[batches[0]] == indices[order[0:5]]).all()
+    assert (all[batches[1]] == indices[order[5:10]]).all()
+
+    # Shuffled, last batch short
+    shuffled_ndx_iter = ds.batch_indices_iterator(
+        batch_size=6, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order = np.random.RandomState(12345).permutation(10)
+    assert len(batches) == 2
+    assert (all[batches[0]] == indices[order[0:6]]).all()
+    assert (all[batches[1]] == indices[order[6:10]]).all()
+
+
+def test_RandomAccessDataSource_repeated():
+    from batchup import data_source
+
+    ds_3 = data_source.RandomAccessDataSource(
+        length=10, epochs=3)
+
+    # Test index generation
+
+    # In order
+    ndx_iter = ds_3.batch_indices_iterator(batch_size=5)
+    all = np.arange(10)
+    batches = list(ndx_iter)
+    assert len(batches) == 6
+    assert (all[batches[0]] == np.arange(0, 5)).all()
+    assert (all[batches[1]] == np.arange(5, 10)).all()
+    assert (all[batches[2]] == np.arange(0, 5)).all()
+    assert (all[batches[3]] == np.arange(5, 10)).all()
+    assert (all[batches[4]] == np.arange(0, 5)).all()
+    assert (all[batches[5]] == np.arange(5, 10)).all()
+
+    # In order, last batch short
+    ndx_iter = ds_3.batch_indices_iterator(batch_size=7)
+    all = np.arange(10)
+    batches = list(ndx_iter)
+    assert len(batches) == 5
+    assert (all[batches[0]] == np.arange(0, 7)).all()
+    assert (all[batches[1]] == np.append(np.arange(7, 10),
+                                         np.arange(0, 4))).all()
+    assert (all[batches[2]] == np.append(np.arange(4, 10),
+                                         np.arange(0, 1))).all()
+    assert (all[batches[3]] == np.arange(1, 8)).all()
+    assert (all[batches[4]] == np.arange(8, 10)).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds_3.batch_indices_iterator(
+        batch_size=5, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(10) for _ in range(3)])
+    assert len(batches) == 6
+    assert (all[batches[0]] == order[0:5]).all()
+    assert (all[batches[1]] == order[5:10]).all()
+    assert (all[batches[2]] == order[10:15]).all()
+    assert (all[batches[3]] == order[15:20]).all()
+    assert (all[batches[4]] == order[20:25]).all()
+    assert (all[batches[5]] == order[25:30]).all()
+
+    # Shuffled, last batch short
+    shuffled_ndx_iter = ds_3.batch_indices_iterator(
+        batch_size=7, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(10) for _ in range(3)])
+    assert len(batches) == 5
+    assert (all[batches[0]] == order[0:7]).all()
+    assert (all[batches[1]] == order[7:14]).all()
+    assert (all[batches[2]] == order[14:21]).all()
+    assert (all[batches[3]] == order[21:28]).all()
+    assert (all[batches[4]] == order[28:30]).all()
+
+
+def test_RandomAccessDataSource_indices_repeated():
+    from batchup import data_source
+
+    indices = np.random.RandomState(12345).permutation(20)[:10]
+    ds_3 = data_source.RandomAccessDataSource(
+        length=20, indices=indices, epochs=3)
+
+    # Test index generation
+
+    # In order
+    ndx_iter = ds_3.batch_indices_iterator(batch_size=5)
+    all = np.arange(20)
+    batches = list(ndx_iter)
+    assert len(batches) == 6
+    assert (all[batches[0]] == indices[0:5]).all()
+    assert (all[batches[1]] == indices[5:10]).all()
+    assert (all[batches[2]] == indices[0:5]).all()
+    assert (all[batches[3]] == indices[5:10]).all()
+    assert (all[batches[4]] == indices[0:5]).all()
+    assert (all[batches[5]] == indices[5:10]).all()
+
+    # In order, last batch short
+    ndx_iter = ds_3.batch_indices_iterator(batch_size=7)
+    all = np.arange(20)
+    batches = list(ndx_iter)
+    assert len(batches) == 5
+    assert (all[batches[0]] == indices[0:7]).all()
+    assert (all[batches[1]] == np.append(indices[7:10],
+                                         indices[0:4])).all()
+    assert (all[batches[2]] == np.append(indices[4:10],
+                                         indices[0:1])).all()
+    assert (all[batches[3]] == indices[1:8]).all()
+    assert (all[batches[4]] == indices[8:10]).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds_3.batch_indices_iterator(
+        batch_size=5, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(10) for _ in range(3)])
+    assert len(batches) == 6
+    assert (all[batches[0]] == indices[order[0:5]]).all()
+    assert (all[batches[1]] == indices[order[5:10]]).all()
+    assert (all[batches[2]] == indices[order[10:15]]).all()
+    assert (all[batches[3]] == indices[order[15:20]]).all()
+    assert (all[batches[4]] == indices[order[20:25]]).all()
+    assert (all[batches[5]] == indices[order[25:30]]).all()
+
+    # Shuffled, last batch short
+    shuffled_ndx_iter = ds_3.batch_indices_iterator(
+        batch_size=7, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(10) for _ in range(3)])
+    assert len(batches) == 5
+    assert (all[batches[0]] == indices[order[0:7]]).all()
+    assert (all[batches[1]] == indices[order[7:14]]).all()
+    assert (all[batches[2]] == indices[order[14:21]]).all()
+    assert (all[batches[3]] == indices[order[21:28]]).all()
+    assert (all[batches[4]] == indices[order[28:30]]).all()
+
+
+def test_RandomAccessDataSource_repeated_small_dataset():
+    from batchup import data_source
+
+    ds_inf = data_source.RandomAccessDataSource(
+        length=20, epochs=-1)
+
+    # Test index generation
+
+    # In order
+    ndx_iter = ds_inf.batch_indices_iterator(batch_size=64)
+    all = np.arange(20)
+    batches = [next(ndx_iter) for _ in range(10)]
+    assert len(batches) == 10
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == np.tile(np.arange(20), [32])).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds_inf.batch_indices_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = [next(shuffled_ndx_iter) for _ in range(10)]
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(20) for _ in range(32)])
+    assert len(batches) == 10
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == order).all()
+
+    # Test fixed number of repetitions
+    ds_16 = data_source.RandomAccessDataSource(
+        length=20, epochs=16)
+    assert ds_16.num_samples() == 320
+
+    # In order
+    ndx_iter = ds_16.batch_indices_iterator(batch_size=64)
+    all = np.arange(20)
+    batches = list(ndx_iter)
+    assert len(batches) == 5
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == np.tile(np.arange(20), [16])).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds_16.batch_indices_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(20) for _ in range(16)])
+    assert len(batches) == 5
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == order).all()
+
+
+def test_RandomAccessDataSource_indices_repeated_small_dataset():
+    from batchup import data_source
+
+    indices = np.random.RandomState(12345).permutation(40)[:20]
+    ds_inf = data_source.RandomAccessDataSource(
+        length=40, indices=indices, epochs=-1)
+
+    # Test index generation
+
+    # In order
+    ndx_iter = ds_inf.batch_indices_iterator(batch_size=64)
+    all = np.arange(40)
+    batches = [next(ndx_iter) for _ in range(10)]
+    assert len(batches) == 10
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == np.tile(indices, [32])).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds_inf.batch_indices_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = [next(shuffled_ndx_iter) for _ in range(10)]
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(20) for _ in range(32)])
+    assert len(batches) == 10
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == indices[order]).all()
+
+    # Test fixed number of repetitions
+    ds_16 = data_source.RandomAccessDataSource(
+        length=40, indices=indices, epochs=16)
+    assert ds_16.num_samples() == 320
+
+    # In order
+    ndx_iter = ds_16.batch_indices_iterator(batch_size=64)
+    all = np.arange(40)
+    batches = list(ndx_iter)
+    assert len(batches) == 5
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == np.tile(indices, [16])).all()
+
+    # Shuffled
+    shuffled_ndx_iter = ds_16.batch_indices_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_ndx_iter)
+    order_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_rng.permutation(20) for _ in range(16)])
+    assert len(batches) == 5
+    x = np.concatenate([all[b] for b in batches], axis=0)
+    assert (x == indices[order]).all()
 
 
 def test_ArrayDataSource():
@@ -91,10 +408,21 @@ def test_ArrayDataSource():
     assert data_source.ArrayDataSource([a10]).num_samples() == 10
     assert data_source.ArrayDataSource([a3a, a3b]).num_samples() == 3
 
-    # Test `batch_iterator`
     X = np.arange(45)
     Y = np.arange(90).reshape((45, 2))
     ads = data_source.ArrayDataSource([X, Y])
+
+    # Test `samples_by_indices_nomapping`
+    batch = ads.samples_by_indices_nomapping(np.arange(15))
+    assert (batch[0] == X[:15]).all()
+    assert (batch[1] == Y[:15]).all()
+
+    # Test `samples_by_indices`
+    batch = ads.samples_by_indices(np.arange(15))
+    assert (batch[0] == X[:15]).all()
+    assert (batch[1] == Y[:15]).all()
+
+    # Test `batch_iterator`
 
     # Three in-order batches
     batches = list(ads.batch_iterator(batch_size=15))
@@ -190,11 +518,22 @@ def test_ArrayDataSource_indices():
     assert data_source.ArrayDataSource([a10]).num_samples() == 10
     assert data_source.ArrayDataSource([a3a, a3b]).num_samples() == 3
 
-    # Test `batch_iterator`
     X = np.arange(90)
     Y = np.arange(180).reshape((90, 2))
     indices = np.random.permutation(90)[:45]
     ads = data_source.ArrayDataSource([X, Y], indices=indices)
+
+    # Test `samples_by_indices_nomapping`
+    batch = ads.samples_by_indices_nomapping(np.arange(15))
+    assert (batch[0] == X[:15]).all()
+    assert (batch[1] == Y[:15]).all()
+
+    # Test `samples_by_indices`
+    batch = ads.samples_by_indices(np.arange(15))
+    assert (batch[0] == X[indices[:15]]).all()
+    assert (batch[1] == Y[indices[:15]]).all()
+
+    # Test `batch_iterator`
 
     # Three in-order batches
     batches = list(ads.batch_iterator(batch_size=15))
@@ -416,6 +755,23 @@ def test_ArrayDataSource_repeated_small_dataset():
                             for _ in range(32)], axis=0)
     check_batches(batches, 10, order, 64)
 
+    # 16 repetitions; take 5 in-order batches of 64 samples each
+    ads_16 = data_source.ArrayDataSource([X, Y], epochs=16)
+    inorder_iter = ads_16.batch_iterator(batch_size=64)
+    batches = list(inorder_iter)
+    order = np.concatenate([np.arange(20)] * 16, axis=0)
+    check_batches(batches, 5, order, 64)
+
+    # 16 repetitions; take 5 shuffled batches
+    shuffled_iter = ads_16.batch_iterator(
+        batch_size=64, shuffle=np.random.RandomState(12345))
+    batches = list(shuffled_iter)
+    # Get the expected order
+    order_shuffle_rng = np.random.RandomState(12345)
+    order = np.concatenate([order_shuffle_rng.permutation(20)
+                            for _ in range(16)], axis=0)
+    check_batches(batches, 5, order, 64)
+
 
 def test_ArrayDataSource_indices_repeated_small_dataset():
     from batchup import data_source
@@ -515,6 +871,9 @@ def test_CallableDataSource():
 
     cds = data_source.CallableDataSource(make_batch_iterator_callable(X, Y))
 
+    # Not random access
+    assert not cds.is_random_access
+
     # Length
     assert cds.num_samples() is None
 
@@ -606,6 +965,10 @@ def test_IteratorDataSource():
     # Re-use the function defined above to create the iterator
     in_order_batch_iter = make_batch_iterator_callable(X, Y)(15)
     ds = data_source.IteratorDataSource(in_order_batch_iter)
+
+    # Not random access
+    assert not ds.is_random_access
+
     assert ds.num_samples() is None
     batches = list(ds.batch_iterator(batch_size=15))
     check_in_order_batches(batches)
@@ -654,6 +1017,9 @@ def test_CompositeDataSource():
     gan_ds = data_source.CompositeDataSource([
         sup_ds, unsup_ds, unsup_ds
     ])
+    struct_gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ], flatten=False)
 
     # Check number of samples
     assert gan_ds.num_samples() == 33
@@ -712,9 +1078,8 @@ def test_CompositeDataSource():
     assert (batches[3][3] == unsup_X[order_dis[30:33]]).all()
 
     # Now disable flattening, resulting in structured batches:
-    batches = list(gan_ds.batch_iterator(
-        batch_size=10, flatten=False,
-        shuffle=np.random.RandomState(12345)))
+    batches = list(struct_gan_ds.batch_iterator(
+        batch_size=10, shuffle=np.random.RandomState(12345)))
 
     # Four batches
     assert len(batches) == 4
@@ -743,6 +1108,278 @@ def test_CompositeDataSource():
     assert (batches[3][0][1] == sup_y[order_sup[30:33]]).all()
     assert (batches[3][1][0] == unsup_X[order_gen[30:33]]).all()
     assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
+
+
+def test_CompositeDataSource_random_access():
+    from batchup import data_source
+
+    # Test `CompositeDataSource` using an example layout; a generative
+    # adversarial network (GAN) for semi-supervised learning
+    # We have:
+    # - 15 supervised samples with ground truths; `sup_X`, `sup_y`
+    # - 33 unsupervised samples `unsup_X`
+    sup_X = np.random.normal(size=(15, 10))
+    sup_y = np.random.randint(0, 10, size=(15,))
+    unsup_X = np.random.normal(size=(33, 10))
+
+    # We need a dataset containing the supervised samples
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], epochs=-1)
+    # We need a dataset containing the unsupervised samples
+    unsup_ds = data_source.ArrayDataSource([unsup_X])
+
+    # We need to:
+    # - repeatedly iterate over the supervised samples
+    # - iterate over the unsupervised samples for the generator
+    # - iterate over the unsupervised samples again in a different order
+    #   for the discriminator
+    gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ])
+    struct_gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ], flatten=False)
+
+    # Check number of samples
+    assert gan_ds.num_samples() == 33
+
+    def check_structured_batch_layout(batch):
+        # Layout is:
+        # [[sup_x, sup_y], [gen_x], [disc_x]]
+        assert isinstance(batch, list)
+        assert isinstance(batch[0], list)
+        assert isinstance(batch[1], list)
+        assert isinstance(batch[2], list)
+        assert len(batch) == 3
+        assert len(batch[0]) == 2
+        assert len(batch[1]) == 1
+        assert len(batch[2]) == 1
+
+    ndx_batches = list(gan_ds.batch_indices_iterator(
+        batch_size=10, shuffle=np.random.RandomState(12345)))
+    # Get the expected order for the supervised, generator and discriminator
+    # sets
+    # Note: draw in the same order that the data source will
+    order_rng = np.random.RandomState(12345)
+    order_sup = order_rng.permutation(15)
+    order_gen = order_rng.permutation(33)
+    order_dis = order_rng.permutation(33)
+    order_sup = np.append(order_sup, order_rng.permutation(15))
+    order_sup = np.append(order_sup, order_rng.permutation(15))
+    order_gen = np.append(order_gen, order_rng.permutation(33))
+    order_dis = np.append(order_dis, order_rng.permutation(33))
+    # Four batches
+    assert len(ndx_batches) == 4
+    # Verify index values
+    assert (ndx_batches[0][0] == order_sup[:10]).all()
+    assert (ndx_batches[0][1] == order_gen[:10]).all()
+    assert (ndx_batches[0][2] == order_dis[:10]).all()
+
+    assert (ndx_batches[1][0] == order_sup[10:20]).all()
+    assert (ndx_batches[1][1] == order_gen[10:20]).all()
+    assert (ndx_batches[1][2] == order_dis[10:20]).all()
+
+    assert (ndx_batches[2][0] == order_sup[20:30]).all()
+    assert (ndx_batches[2][1] == order_gen[20:30]).all()
+    assert (ndx_batches[2][2] == order_dis[20:30]).all()
+
+    assert (ndx_batches[3][0] == order_sup[30:33]).all()
+    assert (ndx_batches[3][1] == order_gen[30:33]).all()
+    assert (ndx_batches[3][2] == order_dis[30:33]).all()
+
+    # Verify data batches
+    batches = [gan_ds.samples_by_indices(b) for b in ndx_batches]
+    # Four batches
+    assert len(batches) == 4
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    assert len(batches[3]) == 4
+    # Verify values
+    assert (batches[0][0] == sup_X[order_sup[:10]]).all()
+    assert (batches[0][1] == sup_y[order_sup[:10]]).all()
+    assert (batches[0][2] == unsup_X[order_gen[:10]]).all()
+    assert (batches[0][3] == unsup_X[order_dis[:10]]).all()
+
+    assert (batches[1][0] == sup_X[order_sup[10:20]]).all()
+    assert (batches[1][1] == sup_y[order_sup[10:20]]).all()
+    assert (batches[1][2] == unsup_X[order_gen[10:20]]).all()
+    assert (batches[1][3] == unsup_X[order_dis[10:20]]).all()
+
+    assert (batches[2][0] == sup_X[order_sup[20:30]]).all()
+    assert (batches[2][1] == sup_y[order_sup[20:30]]).all()
+    assert (batches[2][2] == unsup_X[order_gen[20:30]]).all()
+    assert (batches[2][3] == unsup_X[order_dis[20:30]]).all()
+
+    assert (batches[3][0] == sup_X[order_sup[30:33]]).all()
+    assert (batches[3][1] == sup_y[order_sup[30:33]]).all()
+    assert (batches[3][2] == unsup_X[order_gen[30:33]]).all()
+    assert (batches[3][3] == unsup_X[order_dis[30:33]]).all()
+
+    # Verify unmapped data batches
+    batches = [gan_ds.samples_by_indices_nomapping(b) for b in ndx_batches]
+    # Four batches
+    assert len(batches) == 4
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    assert len(batches[3]) == 4
+    # Verify values
+    assert (batches[0][0] == sup_X[order_sup[:10]]).all()
+    assert (batches[0][1] == sup_y[order_sup[:10]]).all()
+    assert (batches[0][2] == unsup_X[order_gen[:10]]).all()
+    assert (batches[0][3] == unsup_X[order_dis[:10]]).all()
+
+    assert (batches[1][0] == sup_X[order_sup[10:20]]).all()
+    assert (batches[1][1] == sup_y[order_sup[10:20]]).all()
+    assert (batches[1][2] == unsup_X[order_gen[10:20]]).all()
+    assert (batches[1][3] == unsup_X[order_dis[10:20]]).all()
+
+    assert (batches[2][0] == sup_X[order_sup[20:30]]).all()
+    assert (batches[2][1] == sup_y[order_sup[20:30]]).all()
+    assert (batches[2][2] == unsup_X[order_gen[20:30]]).all()
+    assert (batches[2][3] == unsup_X[order_dis[20:30]]).all()
+
+    assert (batches[3][0] == sup_X[order_sup[30:33]]).all()
+    assert (batches[3][1] == sup_y[order_sup[30:33]]).all()
+    assert (batches[3][2] == unsup_X[order_gen[30:33]]).all()
+    assert (batches[3][3] == unsup_X[order_dis[30:33]]).all()
+
+    # Check that incorrectly structured index batches raise an error:
+    with pytest.raises(ValueError):
+        gan_ds.samples_by_indices([np.arange(5)])
+
+    with pytest.raises(ValueError):
+        gan_ds.samples_by_indices_nomapping([np.arange(5)])
+
+    # Now disable flattening, resulting in structured batches:
+    ndx_batches = list(struct_gan_ds.batch_indices_iterator(
+        batch_size=10, shuffle=np.random.RandomState(12345)))
+
+    # Four batches
+    assert len(ndx_batches) == 4
+    # Verify values
+    assert (ndx_batches[0][0] == order_sup[:10]).all()
+    assert (ndx_batches[0][1] == order_gen[:10]).all()
+    assert (ndx_batches[0][2] == order_dis[:10]).all()
+
+    assert (ndx_batches[1][0] == order_sup[10:20]).all()
+    assert (ndx_batches[1][1] == order_gen[10:20]).all()
+    assert (ndx_batches[1][2] == order_dis[10:20]).all()
+
+    assert (ndx_batches[2][0] == order_sup[20:30]).all()
+    assert (ndx_batches[2][1] == order_gen[20:30]).all()
+    assert (ndx_batches[2][2] == order_dis[20:30]).all()
+
+    assert (ndx_batches[3][0] == order_sup[30:33]).all()
+    assert (ndx_batches[3][1] == order_gen[30:33]).all()
+    assert (ndx_batches[3][2] == order_dis[30:33]).all()
+
+    # Verify data batches
+    batches = [struct_gan_ds.samples_by_indices(b) for b in ndx_batches]
+    # Four batches
+    assert len(batches) == 4
+    # Two items in each batch
+    check_structured_batch_layout(batches[0])
+    check_structured_batch_layout(batches[1])
+    check_structured_batch_layout(batches[2])
+    check_structured_batch_layout(batches[3])
+    # Verify values
+    assert (batches[0][0][0] == sup_X[order_sup[:10]]).all()
+    assert (batches[0][0][1] == sup_y[order_sup[:10]]).all()
+    assert (batches[0][1][0] == unsup_X[order_gen[:10]]).all()
+    assert (batches[0][2][0] == unsup_X[order_dis[:10]]).all()
+
+    assert (batches[1][0][0] == sup_X[order_sup[10:20]]).all()
+    assert (batches[1][0][1] == sup_y[order_sup[10:20]]).all()
+    assert (batches[1][1][0] == unsup_X[order_gen[10:20]]).all()
+    assert (batches[1][2][0] == unsup_X[order_dis[10:20]]).all()
+
+    assert (batches[2][0][0] == sup_X[order_sup[20:30]]).all()
+    assert (batches[2][0][1] == sup_y[order_sup[20:30]]).all()
+    assert (batches[2][1][0] == unsup_X[order_gen[20:30]]).all()
+    assert (batches[2][2][0] == unsup_X[order_dis[20:30]]).all()
+
+    assert (batches[3][0][0] == sup_X[order_sup[30:33]]).all()
+    assert (batches[3][0][1] == sup_y[order_sup[30:33]]).all()
+    assert (batches[3][1][0] == unsup_X[order_gen[30:33]]).all()
+    assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
+
+    # Verify data batches
+    batches = [struct_gan_ds.samples_by_indices_nomapping(b)
+               for b in ndx_batches]
+    # Four batches
+    assert len(batches) == 4
+    # Two items in each batch
+    check_structured_batch_layout(batches[0])
+    check_structured_batch_layout(batches[1])
+    check_structured_batch_layout(batches[2])
+    check_structured_batch_layout(batches[3])
+    # Verify values
+    assert (batches[0][0][0] == sup_X[order_sup[:10]]).all()
+    assert (batches[0][0][1] == sup_y[order_sup[:10]]).all()
+    assert (batches[0][1][0] == unsup_X[order_gen[:10]]).all()
+    assert (batches[0][2][0] == unsup_X[order_dis[:10]]).all()
+
+    assert (batches[1][0][0] == sup_X[order_sup[10:20]]).all()
+    assert (batches[1][0][1] == sup_y[order_sup[10:20]]).all()
+    assert (batches[1][1][0] == unsup_X[order_gen[10:20]]).all()
+    assert (batches[1][2][0] == unsup_X[order_dis[10:20]]).all()
+
+    assert (batches[2][0][0] == sup_X[order_sup[20:30]]).all()
+    assert (batches[2][0][1] == sup_y[order_sup[20:30]]).all()
+    assert (batches[2][1][0] == unsup_X[order_gen[20:30]]).all()
+    assert (batches[2][2][0] == unsup_X[order_dis[20:30]]).all()
+
+    assert (batches[3][0][0] == sup_X[order_sup[30:33]]).all()
+    assert (batches[3][0][1] == sup_y[order_sup[30:33]]).all()
+    assert (batches[3][1][0] == unsup_X[order_gen[30:33]]).all()
+    assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
+
+
+def test_CompositeDataSource_no_random_access():
+    from batchup import data_source
+
+    # Test `CompositeDataSource` using an example layout; a generative
+    # adversarial network (GAN) for semi-supervised learning
+    # We have:
+    # - 15 supervised samples with ground truths; `sup_X`, `sup_y`
+    # - 33 unsupervised samples `unsup_X`
+    sup_X = np.random.normal(size=(15, 10))
+    sup_y = np.random.randint(0, 10, size=(15,))
+    unsup_X = np.random.normal(size=(33, 10))
+
+    sup_call = make_batch_iterator_callable(sup_X, sup_y)
+
+    # We need a dataset containing the supervised samples
+    sup_ds = data_source.CallableDataSource(sup_call)
+    # We need a dataset containing the unsupervised samples
+    unsup_ds = data_source.ArrayDataSource([unsup_X])
+
+    # We need to:
+    # - repeatedly iterate over the supervised samples
+    # - iterate over the unsupervised samples for the generator
+    # - iterate over the unsupervised samples again in a different order
+    #   for the discriminator
+    gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ])
+    struct_gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ], flatten=False)
+
+    assert not gan_ds.is_random_access
+    assert not struct_gan_ds.is_random_access
+
+    with pytest.raises(TypeError):
+        next(gan_ds.batch_indices_iterator(batch_size=10))
+
+    with pytest.raises(TypeError):
+        next(gan_ds.samples_by_indices(np.arange(10)))
+
+    with pytest.raises(TypeError):
+        next(gan_ds.samples_by_indices_nomapping(np.arange(10)))
 
 
 def test_batch_map():
