@@ -107,19 +107,16 @@ class WorkerPool(object):
         processes; long-running tasks from one work stream will delay other
         work streams that use the same pool.
 
-        >>> def do_some_work(x, y):
-        ...     return x.sum() * y.sum()
-
         >>> def task_generator():
         ...     for i in range(10):
-        ...         a = np.random.normal(size=(10,))
-        ...         b = np.random.uniform(size=(10,))
-        ...         yield do_some_work, (a, b)
+        ...         # Will invoke in separate process:
+        ...         #   `np.random.normal(0.0, 1.0, (100, 10))`
+        ...         yield np.random.normal, (0.0, 1.0, (100, 10))
         ...
         >>> pool = WorkerPool()
-        ... ws = pool.work_stream(task_generator())
+        >>> ws = pool.work_stream(task_generator())
         ...
-        ... for x in ws.retrieve_iter():
+        >>> for x in ws.retrieve_iter():
         ...     # `do_some_work` will be invoked in a separate process
         ...     pass
 
@@ -153,31 +150,15 @@ class WorkerPool(object):
         file names or other information that can be used to find locate large
         sources of data.
 
-        >>> class ExpensiveSource (object):
-        ...     def __len__(self):
-        ...         return 100
-        ...
-        ...     def __getitem__(self, indices):
-        ...         rng = np.random.RandomState(int(indices.sum()))
-        ...         return rng.normal(size=(indices.shape[0], 3))
-        ...
-        >>> class ExpensiveTarget (object):
-        ...     def __len__(self):
-        ...         return 100
-        ...
-        ...     def __getitem__(self, indices):
-        ...         rng = np.random.RandomState(int(indices.sum()))
-        ...         return rng.randint(low=0, high=10,
-        ...                            size=(indices.shape[0],))
-        ...
         >>> pool = WorkerPool()
         ...
-        ... ds = data_source.ArrayDataSource([ExpensiveSource(),
-        ...     ExpensiveTarget()])
+        >>> ds = data_source.ArrayDataSource([
+        ...     np.random.normal(size=(100,10)),
+        ...     np.random.randint(0, 10, size=(100,))])
         ...
-        ... pds = pool.parallel_data_source(ds)
+        >>> pds = pool.parallel_data_source(ds)
         ...
-        ... for (batch_src, batch_tgt) in pds.batch_iterator(batch_size=20):
+        >>> for (batch_src, batch_tgt) in pds.batch_iterator(batch_size=20):
         ...     # Batch generation will occur in separate processes
         ...     pass
 
@@ -249,7 +230,7 @@ class WorkStream(object):
 
     def __enqueue(self):
         try:
-            task = self.__task_gen.next()
+            task = next(self.__task_gen)
         except StopIteration:
             return False
         else:
