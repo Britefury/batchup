@@ -330,7 +330,6 @@ def test_RandomAccessDataSource_repeated_small_dataset():
     ndx_iter = ds_16.batch_indices_iterator(batch_size=64)
     all = np.arange(20)
     batches = list(ndx_iter)
-    print batches
     assert len(batches) == 5
     x = np.concatenate([all[b] for b in batches], axis=0)
     assert (x == np.tile(np.arange(20), [16])).all()
@@ -382,7 +381,6 @@ def test_RandomAccessDataSource_indices_repeated_small_dataset():
     ndx_iter = ds_16.batch_indices_iterator(batch_size=64)
     all = np.arange(40)
     batches = list(ndx_iter)
-    print batches
     assert len(batches) == 5
     x = np.concatenate([all[b] for b in batches], axis=0)
     assert (x == np.tile(indices, [16])).all()
