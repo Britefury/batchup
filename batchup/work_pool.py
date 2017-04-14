@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import collections
 import multiprocessing.managers
-import cPickle
+from six.moves.cPickle import loads, dumps
 
 import joblib
 
@@ -23,7 +23,7 @@ def _deserialise_args(shared_objects, local_objects,
             if key in local_objects:
                 x = local_objects[key]
             else:
-                x = cPickle.loads(shared_objects[arg.key])
+                x = loads(shared_objects[arg.key])
                 local_objects[arg.key] = x
         else:
             x = arg
@@ -39,7 +39,7 @@ def _serialise_args(shared_objects, args):  # pragma: no cover
             value = arg.value
             key = id(value)
             if key not in shared_objects:
-                shared_objects[key] = cPickle.dumps(value)
+                shared_objects[key] = dumps(value)
             ref = _SharedRef(key=key)
             serialised = ref
         else:
