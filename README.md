@@ -22,6 +22,7 @@ BatchUp supports some standard machine learning datasets. They will be automatic
 - SVHN
 - CIFAR-10
 - STL
+- USPS
 
 #### Configuring BatchUp
 Data paths, etc.
@@ -319,6 +320,24 @@ ds = stl.STL(n_val_folds=1)
     indices
     
 We keep the image data in `uint8` form to save memory,
+
+
+#### USPS dataset
+
+Load the USPS dataset (similar to MNIST hand-written digits but smaller):
+```py3
+from batchup.datasets import usps
+
+# Load USPS dataset (downloading it if necessary) and retain 729
+# training samples for validation
+ds = usps.USPS(n_val=729)
+```
+
+- `ds.train_X` is a `(n, 1, 16, 16)` `float32` array that contains the
+    training images.
+- `ds.train_y` is a `(n,)` `int32` array that contains the ground truths.
+- `ds.val_X` and `ds.val_y` contain the validation samples
+- `ds.test_X` and `ds.test_y` contain the test samples
 
 
 ## Configuring BatchUp (paths etc).
