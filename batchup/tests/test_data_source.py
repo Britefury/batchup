@@ -1396,14 +1396,14 @@ def test_batch_map():
 
     # Apply the function defined above:
     batch_iter = ds.batch_iterator(batch_size=5)
-    X_sqr_sum = data_source.batch_map(sqr_sum, batch_iter)
+    X_sqr_sum = data_source.batch_map_concat(sqr_sum, batch_iter)
     assert (X_sqr_sum[0] == (X ** 2).sum(axis=1)).all()
 
     # Process 2 batches at a time:
     batch_iter = ds.batch_iterator(batch_size=5)
     for i in range(5):
-        partial_result = data_source.batch_map(sqr_sum, batch_iter,
-                                               batch_limit=2)
+        partial_result = data_source.batch_map_concat(sqr_sum, batch_iter,
+                                                      n_batches=2)
         # Should have 10 samples per partial result
         assert partial_result[0].shape[0] == 10
         j = i * 10
@@ -1428,23 +1428,23 @@ def test_batch_map():
     Y = np.arange(90).reshape((45, 2))
     ads = data_source.ArrayDataSource([X, Y])
 
-    [x, y] = data_source.batch_map(batch_func, ads.batch_iterator(5),
-                                   progress_iter_func, batch_limit=9)
+    [x, y] = data_source.batch_map_concat(batch_func, ads.batch_iterator(5),
+                                          progress_iter_func, n_batches=9)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
-    [x, y] = data_source.batch_map(batch_func, ads.batch_iterator(5),
-                                   progress_iter_func, batch_limit=9)
+    [x, y] = data_source.batch_map_concat(batch_func, ads.batch_iterator(5),
+                                          progress_iter_func, n_batches=9)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
     # Test prepend_args
     ads_y = data_source.ArrayDataSource([Y])
-    [x, y] = data_source.batch_map(batch_func, ads_y.batch_iterator(5),
-                                   progress_iter_func, batch_limit=9,
-                                   prepend_args=(np.array([5]),))
+    [x, y] = data_source.batch_map_concat(batch_func, ads_y.batch_iterator(5),
+                                          progress_iter_func, n_batches=9,
+                                          prepend_args=(np.array([5]),))
 
     assert (x == 5 + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
@@ -1481,28 +1481,28 @@ def test_mean_batch_map():
 
     # Apply the loss sum function defined above:
     batch_iter = ds.batch_iterator(batch_size=5)
-    loss = data_source.mean_batch_map(binary_crossentropy_loss_sum,
-                                      batch_iter, batch_limit=2,
+    loss = data_source.batch_map_mean(binary_crossentropy_loss_sum,
+                                      batch_iter, n_batches=2,
                                       progress_iter_func=progress_iter_func)
     assert np.allclose(
         loss, binary_crossentropy_loss(pred, tgt).mean())
 
     # Have `mean_batch_map` sum over axis 0:
     batch_iter = ds.batch_iterator(batch_size=5)
-    loss = data_source.mean_batch_map(binary_crossentropy_loss, batch_iter,
+    loss = data_source.batch_map_mean(binary_crossentropy_loss, batch_iter,
                                       sum_axis=0)
     assert np.allclose(
         loss, binary_crossentropy_loss(pred, tgt).mean())
 
-    # Construct a large data set and use `batch_limit` to limit the
+    # Construct a large data set and use `n_batches` to limit the
     # number of batches processed in one go
     pred_large = np.random.uniform(0.1, 0.9, size=(100, 10))
     tgt_large = np.random.uniform(0.1, 0.9, size=(100, 10))
     ds_large = data_source.ArrayDataSource([pred_large, tgt_large])
     iter_large = ds_large.batch_iterator(batch_size=5)
     for i in range(10):
-        partial_loss = data_source.mean_batch_map(
-            binary_crossentropy_loss_sum, iter_large, batch_limit=2)
+        partial_loss = data_source.batch_map_mean(
+            binary_crossentropy_loss_sum, iter_large, n_batches=2)
         j = i * 10
         assert np.allclose(
             partial_loss, binary_crossentropy_loss(
@@ -1531,20 +1531,21 @@ def test_data_source_method_batch_map():
     Y = np.arange(90).reshape((45, 2))
     ads = data_source.ArrayDataSource([X, Y])
 
-    [x, y] = ads.batch_map(batch_func, 5, progress_iter_func, batch_limit=9)
+    [x, y] = ads.batch_map_concat(batch_func, 5, progress_iter_func,
+                                  n_batches=9)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
-    [x, y] = ads.batch_map(batch_func, 5, progress_iter_func)
+    [x, y] = ads.batch_map_concat(batch_func, 5, progress_iter_func)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
     # Test prepend_args
     ads_y = data_source.ArrayDataSource([Y])
-    [x, y] = ads_y.batch_map(batch_func, 5, progress_iter_func,
-                             prepend_args=(np.array([5]),))
+    [x, y] = ads_y.batch_map_concat(batch_func, 5, progress_iter_func,
+                                    prepend_args=(np.array([5]),))
 
     assert (x == 5 + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
@@ -1553,14 +1554,14 @@ def test_data_source_method_batch_map():
     def batch_func_no_ret(batch_X, batch_Y):
         pass
 
-    r = ads.batch_map(batch_func_no_ret, 5, progress_iter_func)
+    r = ads.batch_map_concat(batch_func_no_ret, 5, progress_iter_func)
     assert r is None
 
     # Test batch function with single array return value
     def batch_func_one_ret(batch_X, batch_Y):
         return (batch_Y**2).sum(axis=1)
 
-    [y] = ads.batch_map(batch_func_one_ret, 5, progress_iter_func)
+    [y] = ads.batch_map_concat(batch_func_one_ret, 5, progress_iter_func)
 
     assert (y == (Y**2).sum(axis=1)).all()
 
@@ -1569,19 +1570,20 @@ def test_data_source_method_batch_map():
         return 'invalid'
 
     with pytest.raises(TypeError):
-        ads.batch_map(batch_func_invalid_ret_type, 5, progress_iter_func)
+        ads.batch_map_concat(batch_func_invalid_ret_type, 5,
+                             progress_iter_func)
 
     # Check that using `repeats=-1` without specifying the number of
     # batches raises `ValueError`, as this results in a data source with
     # an infinite number of samples
     ads_inf = data_source.ArrayDataSource([X, Y], repeats=-1)
     with pytest.raises(ValueError):
-        ads_inf.batch_map(batch_func, 5, progress_iter_func)
+        ads_inf.batch_map_concat(batch_func, 5, progress_iter_func)
 
     # Check that using `repeats=-1` while specifying the number of
     # batches is OK. Don't use progress_iter_func as it expects 9 batches,
     # not 15.
-    [x, y] = ads_inf.batch_map(batch_func, 5, n_batches=15)
+    [x, y] = ads_inf.batch_map_concat(batch_func, 5, n_batches=15)
 
     assert (x == np.append(X, X[:30], axis=0) + 2).all()
     assert (y == (np.append(Y, Y[:30], axis=0)**2).sum(axis=1)).all()
@@ -1610,15 +1612,15 @@ def test_data_source_method_mean_batch_map_in_order():
         assert not leave
         return iterator
 
-    [x, y] = data_source.mean_batch_map(
+    [x, y] = data_source.batch_map_mean(
         batch_func, ads.batch_iterator(5),
         progress_iter_func=progress_iter_func, sum_axis=None,
-        batch_limit=10)
+        n_batches=10)
 
     assert np.allclose(x, X.mean())
     assert np.allclose(y, (Y**2).sum(axis=1).mean())
 
-    [x, y] = ads.mean_batch_map(
+    [x, y] = ads.batch_map_mean(
         batch_func, 5, progress_iter_func=progress_iter_func, sum_axis=None)
 
     assert np.allclose(x, X.mean())
@@ -1638,7 +1640,7 @@ def test_data_source_method_mean_batch_map_in_order():
         assert not leave
         return iterator
 
-    [x] = ads.mean_batch_map(
+    [x] = ads.batch_map_mean(
         batch_func_single, 5, progress_iter_func=progress_iter_func,
         sum_axis=None)
 
@@ -1650,7 +1652,7 @@ def test_data_source_method_mean_batch_map_in_order():
     def batch_func_no_results(batch_X, batch_Y):
         return None
 
-    res = ads.mean_batch_map(
+    res = ads.batch_map_mean(
         batch_func_no_results, 5, progress_iter_func=progress_iter_func,
         sum_axis=None)
 
@@ -1663,7 +1665,7 @@ def test_data_source_method_mean_batch_map_in_order():
         return 'Should not return a string'
 
     with pytest.raises(TypeError):
-        ads.mean_batch_map(batch_func_invalid, 5)
+        ads.batch_map_mean(batch_func_invalid, 5)
 
     #
     # Prepend arguments to batch function
@@ -1673,7 +1675,7 @@ def test_data_source_method_mean_batch_map_in_order():
         assert b == 3.14
         return [batch_X.sum(), (batch_Y**2).sum(axis=1).sum()]
 
-    [x, y] = ads.mean_batch_map(
+    [x, y] = ads.batch_map_mean(
         batch_func_prepend, 5, progress_iter_func=progress_iter_func,
         sum_axis=None, prepend_args=(42, 3.14))
 
@@ -1685,12 +1687,12 @@ def test_data_source_method_mean_batch_map_in_order():
     # an infinite number of samples
     ads_inf = data_source.ArrayDataSource([X, Y], repeats=-1)
     with pytest.raises(ValueError):
-        ads_inf.mean_batch_map(batch_func, 5, progress_iter_func)
+        ads_inf.batch_map_mean(batch_func, 5, progress_iter_func)
 
     # Check that using `repeats=-1` while specifying the number of
     # batches is OK. Don't use progress_iter_func as it expects 9 batches,
     # not 15.
-    [x, y] = ads_inf.mean_batch_map(batch_func, 5, n_batches=15)
+    [x, y] = ads_inf.batch_map_mean(batch_func, 5, n_batches=15)
 
     assert np.allclose(x, np.append(X, X[:28], axis=0).mean())
     assert np.allclose(
@@ -1705,10 +1707,10 @@ def test_data_source_method_mean_batch_map_in_order():
     tgt = np.random.uniform(0.0, 1.0, size=(15, 10))
     ds = data_source.ArrayDataSource([pred, tgt])
 
-    loss = ds.mean_batch_map(binary_crossentropy, batch_size=5)
+    loss = ds.batch_map_mean(binary_crossentropy, batch_size=5)
     assert np.allclose(loss, binary_crossentropy(pred, tgt) / pred.shape[0])
 
-    loss = ds.mean_batch_map(binary_crossentropy, batch_size=5,
+    loss = ds.batch_map_mean(binary_crossentropy, batch_size=5,
                              n_batches=1)
     assert np.allclose(loss, binary_crossentropy(pred[:5], tgt[:5]) / 5.0)
 
@@ -1738,7 +1740,7 @@ def test_data_source_method_mean_batch_map_in_order_per_sample_func():
         assert not leave
         return iterator
 
-    [x, y] = ads.mean_batch_map(batch_func, 5,
+    [x, y] = ads.batch_map_mean(batch_func, 5,
                                 progress_iter_func=progress_iter_func,
                                 sum_axis=0)
 
@@ -1751,7 +1753,7 @@ def test_data_source_method_mean_batch_map_in_order_per_sample_func():
     def batch_func_single(batch_X, batch_Y):
         return batch_X + 2
 
-    [x] = ads.mean_batch_map(batch_func_single, 5, sum_axis=0)
+    [x] = ads.batch_map_mean(batch_func_single, 5, sum_axis=0)
 
     assert np.allclose(x, X.mean() + 2.0)
     assert np.allclose(y, (Y**2).sum(axis=1).mean())
@@ -1762,7 +1764,7 @@ def test_data_source_method_mean_batch_map_in_order_per_sample_func():
     def batch_func_no_results(batch_X, batch_Y):
         return None
 
-    res = ads.mean_batch_map(batch_func_no_results, 5,
+    res = ads.batch_map_mean(batch_func_no_results, 5,
                              progress_iter_func=progress_iter_func,
                              sum_axis=0)
 
