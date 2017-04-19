@@ -1,10 +1,7 @@
-__author__ = 'Britefury'
-
 import gzip
 import numpy as np
 
-
-from britefury_lasagne import dataset
+from . import dataset
 
 
 def _download_usps(filename, source='http://statweb.stanford.edu/~tibs/ElemStatLearn/datasets/'):
