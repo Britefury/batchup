@@ -176,7 +176,7 @@ def test_RandomAccessDataSource_repeated():
     from batchup import data_source
 
     ds_3 = data_source.RandomAccessDataSource(
-        length=10, epochs=3)
+        length=10, repeats=3)
 
     # Test index generation
 
@@ -238,7 +238,7 @@ def test_RandomAccessDataSource_indices_repeated():
 
     indices = np.random.RandomState(12345).permutation(20)[:10]
     ds_3 = data_source.RandomAccessDataSource(
-        length=20, indices=indices, epochs=3)
+        length=20, indices=indices, repeats=3)
 
     # Test index generation
 
@@ -299,7 +299,7 @@ def test_RandomAccessDataSource_repeated_small_dataset():
     from batchup import data_source
 
     ds_inf = data_source.RandomAccessDataSource(
-        length=20, epochs=-1)
+        length=20, repeats=-1)
 
     # Test index generation
 
@@ -323,7 +323,7 @@ def test_RandomAccessDataSource_repeated_small_dataset():
 
     # Test fixed number of repetitions
     ds_16 = data_source.RandomAccessDataSource(
-        length=20, epochs=16)
+        length=20, repeats=16)
     assert ds_16.num_samples() == 320
 
     # In order
@@ -350,7 +350,7 @@ def test_RandomAccessDataSource_indices_repeated_small_dataset():
 
     indices = np.random.RandomState(12345).permutation(40)[:20]
     ds_inf = data_source.RandomAccessDataSource(
-        length=40, indices=indices, epochs=-1)
+        length=40, indices=indices, repeats=-1)
 
     # Test index generation
 
@@ -374,7 +374,7 @@ def test_RandomAccessDataSource_indices_repeated_small_dataset():
 
     # Test fixed number of repetitions
     ds_16 = data_source.RandomAccessDataSource(
-        length=40, indices=indices, epochs=16)
+        length=40, indices=indices, repeats=16)
     assert ds_16.num_samples() == 320
 
     # In order
@@ -600,14 +600,14 @@ def test_ArrayDataSource_repeated():
             assert (batch[1] == Y[batch_order]).all()
 
     # Check size
-    assert data_source.ArrayDataSource([X, Y], epochs=1).num_samples() == 50
-    assert data_source.ArrayDataSource([X, Y], epochs=2).num_samples() == 100
-    assert data_source.ArrayDataSource([X, Y], epochs=5).num_samples() == 250
-    assert data_source.ArrayDataSource([X, Y], epochs=-1).num_samples() == \
-        np.inf
+    assert data_source.ArrayDataSource([X, Y], repeats=1).num_samples() == 50
+    assert data_source.ArrayDataSource([X, Y], repeats=2).num_samples() == 100
+    assert data_source.ArrayDataSource([X, Y], repeats=5).num_samples() == 250
+    inf_ds = data_source.ArrayDataSource([X, Y], repeats=-1)
+    assert inf_ds.num_samples() == np.inf
 
     # 3 repetitions; 150 samples, 8 in-order batches
-    ads_3 = data_source.ArrayDataSource([X, Y], epochs=3)
+    ads_3 = data_source.ArrayDataSource([X, Y], repeats=3)
     inorder_iter = ads_3.batch_iterator(batch_size=20)
     batches = list(inorder_iter)
     order = np.concatenate([np.arange(50)] * 3, axis=0)
@@ -625,7 +625,7 @@ def test_ArrayDataSource_repeated():
     check_batches(batches, 8, order)
 
     # Infinite repetitions; take 5 in-order batches
-    ads_inf = data_source.ArrayDataSource([X, Y], epochs=-1)
+    ads_inf = data_source.ArrayDataSource([X, Y], repeats=-1)
     inorder_iter = ads_inf.batch_iterator(batch_size=20)
     batches = [next(inorder_iter) for i in range(5)]
     order = np.concatenate([np.arange(50)] * 2, axis=0)
@@ -641,12 +641,12 @@ def test_ArrayDataSource_repeated():
                       order_shuffle_rng.permutation(50), axis=0)
     check_batches(batches, 5, order)
 
-    # Check invalid values for epochs
+    # Check invalid values for repeats
     with pytest.raises(ValueError):
-        data_source.ArrayDataSource([X, Y], epochs=0)
+        data_source.ArrayDataSource([X, Y], repeats=0)
 
     with pytest.raises(ValueError):
-        data_source.ArrayDataSource([X, Y], epochs=-2)
+        data_source.ArrayDataSource([X, Y], repeats=-2)
 
 
 def test_ArrayDataSource_indices_repeated():
@@ -676,14 +676,14 @@ def test_ArrayDataSource_indices_repeated():
             assert (batch[1] == Y[batch_order]).all()
 
     # 3 repetitions; 8 in-order batches
-    ads_3 = data_source.ArrayDataSource([X, Y], indices=indices, epochs=3)
+    ads_3 = data_source.ArrayDataSource([X, Y], indices=indices, repeats=3)
     inorder_iter = ads_3.batch_iterator(batch_size=20)
     batches = list(inorder_iter)
     order = np.concatenate([indices, indices, indices], axis=0)
     check_batches(batches, 8, order)
 
     # 3 repetitions; 8 shuffled batches
-    ads_3 = data_source.ArrayDataSource([X, Y], indices=indices, epochs=3)
+    ads_3 = data_source.ArrayDataSource([X, Y], indices=indices, repeats=3)
     inorder_iter = ads_3.batch_iterator(batch_size=20,
                                         shuffle=np.random.RandomState(12345))
     batches = list(inorder_iter)
@@ -696,7 +696,7 @@ def test_ArrayDataSource_indices_repeated():
     check_batches(batches, 8, order)
 
     # Infinite repetitions; take 5 in-order batches
-    ads_inf = data_source.ArrayDataSource([X, Y], indices=indices, epochs=-1)
+    ads_inf = data_source.ArrayDataSource([X, Y], indices=indices, repeats=-1)
     inorder_iter = ads_inf.batch_iterator(batch_size=20)
     batches = [next(inorder_iter) for i in range(5)]
     order = np.concatenate([indices, indices], axis=0)
@@ -739,7 +739,7 @@ def test_ArrayDataSource_repeated_small_dataset():
             assert (batch[1] == Y[batch_order]).all()
 
     # Infinite repetitions; take 10 in-order batches of 64 samples each
-    ads_inf = data_source.ArrayDataSource([X, Y], epochs=-1)
+    ads_inf = data_source.ArrayDataSource([X, Y], repeats=-1)
     inorder_iter = ads_inf.batch_iterator(batch_size=64)
     batches = [next(inorder_iter) for i in range(10)]
     order = np.concatenate([np.arange(20)] * 32, axis=0)
@@ -756,7 +756,7 @@ def test_ArrayDataSource_repeated_small_dataset():
     check_batches(batches, 10, order, 64)
 
     # 16 repetitions; take 5 in-order batches of 64 samples each
-    ads_16 = data_source.ArrayDataSource([X, Y], epochs=16)
+    ads_16 = data_source.ArrayDataSource([X, Y], repeats=16)
     inorder_iter = ads_16.batch_iterator(batch_size=64)
     batches = list(inorder_iter)
     order = np.concatenate([np.arange(20)] * 16, axis=0)
@@ -800,7 +800,7 @@ def test_ArrayDataSource_indices_repeated_small_dataset():
             assert (batch[1] == Y[batch_order]).all()
 
     # Infinite repetitions; take 10 in-order batches
-    ads_inf = data_source.ArrayDataSource([X, Y], indices=indices, epochs=-1)
+    ads_inf = data_source.ArrayDataSource([X, Y], indices=indices, repeats=-1)
     inorder_iter = ads_inf.batch_iterator(batch_size=64)
     batches = [next(inorder_iter) for i in range(10)]
     order = np.concatenate([indices] * 64, axis=0)
@@ -1005,7 +1005,7 @@ def test_CompositeDataSource():
     unsup_X = np.random.normal(size=(33, 10))
 
     # We need a dataset containing the supervised samples
-    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], epochs=-1)
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], repeats=-1)
     # We need a dataset containing the unsupervised samples
     unsup_ds = data_source.ArrayDataSource([unsup_X])
 
@@ -1123,7 +1123,7 @@ def test_CompositeDataSource_random_access():
     unsup_X = np.random.normal(size=(33, 10))
 
     # We need a dataset containing the supervised samples
-    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], epochs=-1)
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], repeats=-1)
     # We need a dataset containing the unsupervised samples
     unsup_ds = data_source.ArrayDataSource([unsup_X])
 
@@ -1571,14 +1571,14 @@ def test_data_source_method_batch_map():
     with pytest.raises(TypeError):
         ads.batch_map(batch_func_invalid_ret_type, 5, progress_iter_func)
 
-    # Check that using `epochs=-1` without specifying the number of
+    # Check that using `repeats=-1` without specifying the number of
     # batches raises `ValueError`, as this results in a data source with
     # an infinite number of samples
-    ads_inf = data_source.ArrayDataSource([X, Y], epochs=-1)
+    ads_inf = data_source.ArrayDataSource([X, Y], repeats=-1)
     with pytest.raises(ValueError):
         ads_inf.batch_map(batch_func, 5, progress_iter_func)
 
-    # Check that using `epochs=-1` while specifying the number of
+    # Check that using `repeats=-1` while specifying the number of
     # batches is OK. Don't use progress_iter_func as it expects 9 batches,
     # not 15.
     [x, y] = ads_inf.batch_map(batch_func, 5, n_batches=15)
@@ -1680,14 +1680,14 @@ def test_data_source_method_mean_batch_map_in_order():
     assert np.allclose(x, X.mean())
     assert np.allclose(y, (Y**2).sum(axis=1).mean())
 
-    # Check that using `epochs=-1` without specifying the number of
+    # Check that using `repeats=-1` without specifying the number of
     # batches raises `ValueError`, as this results in a data source with
     # an infinite number of samples
-    ads_inf = data_source.ArrayDataSource([X, Y], epochs=-1)
+    ads_inf = data_source.ArrayDataSource([X, Y], repeats=-1)
     with pytest.raises(ValueError):
         ads_inf.mean_batch_map(batch_func, 5, progress_iter_func)
 
-    # Check that using `epochs=-1` while specifying the number of
+    # Check that using `repeats=-1` while specifying the number of
     # batches is OK. Don't use progress_iter_func as it expects 9 batches,
     # not 15.
     [x, y] = ads_inf.mean_batch_map(batch_func, 5, n_batches=15)
