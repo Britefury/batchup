@@ -333,13 +333,13 @@ class RandomAccessDataSource (AbstractDataSource):
     indices: NumPy array, 1D dtype=int or None
         An array of indices that identify the subset of samples drawn
         from data that are to be used
-    epochs: int (default=1)
+    repeats: int (default=1)
         The number of repetitions, or `-1` for infinite. A value of 0 or
         a negative value that is not -1 will cause `ValueError` to be
         raised.
 
     """
-    def __init__(self, length, indices=None, epochs=1):
+    def __init__(self, length, indices=None, repeats=1):
         """
         Constructor for random access data source
 
@@ -350,16 +350,16 @@ class RandomAccessDataSource (AbstractDataSource):
         indices: NumPy array, 1D dtype=int or None
             An array of indices that identify the subset of samples drawn
             from data that are to be used
-        epochs: int (default=1)
+        repeats: int (default=1)
             The number of repetitions, or `-1` for infinite. A value of 0 or
             a negative value that is not -1 will cause `ValueError` to be
             raised.
         """
-        if epochs == 0 or epochs < -1:
-            raise ValueError('Invalid number of epochs; should be >= 1 or '
-                             '-1, not {}'.format(epochs))
+        if repeats == 0 or repeats < -1:
+            raise ValueError('Invalid number of repeats; should be >= 1 or '
+                             '-1, not {}'.format(repeats))
         self.indices = indices
-        self.epochs = epochs
+        self.repeats = repeats
         if self.indices is not None:
             # The number of samples is the size of `indices`
             self.length = len(self.indices)
@@ -388,16 +388,16 @@ class RandomAccessDataSource (AbstractDataSource):
         Returns
         -------
         int or `np.inf`
-            If `epochs` is `-1`, `np.inf`.
+            If `repeats` is `-1`, `np.inf`.
             Otherwise, the length of the data set multiplied by the value of
-            `self.epochs`. The length of the data set is the value of the
+            `self.repeats`. The length of the data set is the value of the
             `length` parameter passed to the constructor, or the length of
             the indices array if provided.
         """
-        if self.epochs == -1:
+        if self.repeats == -1:
             return np.inf
         else:
-            return self.length * self.epochs
+            return self.length * self.repeats
 
     def samples_by_indices_nomapping(self, indices):
         """
@@ -475,7 +475,7 @@ class RandomAccessDataSource (AbstractDataSource):
             1D NumPy integer arrays.
         """
         shuffle = self._get_shuffle_rng(shuffle)
-        if self.epochs == 1:
+        if self.repeats == 1:
             if shuffle is not None:
                 if self.indices is not None:
                     indices = shuffle.permutation(self.indices)
@@ -491,7 +491,7 @@ class RandomAccessDataSource (AbstractDataSource):
                     for i in range(0, self.length, batch_size):
                         yield slice(i, i + batch_size)
         else:
-            epochs = self.epochs
+            repeats = self.repeats
             if shuffle is not None:
                 if self.indices is not None:
                     indices = shuffle.permutation(self.indices)
@@ -522,14 +522,15 @@ class RandomAccessDataSource (AbstractDataSource):
                                 else:
                                     indices = shuffle.permutation(self.length)
                                 i -= self.length
-                                # Reduce the number of remaining epochs
-                                epochs = epochs - 1 if epochs != -1 else -1
-                                if epochs == 0:
+                                # Reduce the number of remaining repeats
+                                if repeats != -1:
+                                    repeats -= 1
+                                if repeats == 0:
                                     break
 
                         if batch_ndx.shape[0] > 0:
                             yield batch_ndx
-                        if epochs == 0:
+                        if repeats == 0:
                             break
             else:
                 if self.indices is not None:
@@ -552,14 +553,15 @@ class RandomAccessDataSource (AbstractDataSource):
                                 i += k
                                 if i >= self.length:
                                     i -= self.length
-                                    # Reduce the number of remaining epochs
-                                    epochs = epochs - 1 if epochs != -1 else -1
-                                    if epochs == 0:
+                                    # Reduce the number of remaining repeats
+                                    if repeats != -1:
+                                        repeats -= 1
+                                    if repeats == 0:
                                         break
 
                             if batch_ndx.shape[0] > 0:
                                 yield batch_ndx
-                            if epochs == 0:
+                            if repeats == 0:
                                 break
                 else:
                     i = 0
@@ -571,9 +573,10 @@ class RandomAccessDataSource (AbstractDataSource):
                             i = j
                         elif j <= self.length * 2:
                             # One restart is required
-                            # Reduce the number of remaining epochs
-                            epochs = epochs - 1 if epochs != -1 else -1
-                            if epochs == 0:
+                            # Reduce the number of remaining repeats
+                            if repeats != -1:
+                                repeats -= 1
+                            if repeats == 0:
                                 # Finished; emit remaining elements
                                 if i < self.length:
                                     yield slice(i, self.length)
@@ -599,14 +602,15 @@ class RandomAccessDataSource (AbstractDataSource):
                                 i += k
                                 if i >= self.length:
                                     i -= self.length
-                                    # Reduce the number of remaining epochs
-                                    epochs = epochs - 1 if epochs != -1 else -1
-                                    if epochs == 0:
+                                    # Reduce the number of remaining repeats
+                                    if repeats != -1:
+                                        repeats -= 1
+                                    if repeats == 0:
                                         break
 
                             if batch_ndx.shape[0] > 0:
                                 yield batch_ndx
-                            if epochs == 0:
+                            if repeats == 0:
                                 break
 
     def batch_iterator(self, batch_size, shuffle=None, **kwargs):
@@ -666,7 +670,7 @@ class ArrayDataSource (RandomAccessDataSource):
     of the samples in the subset in the form of a NumPy integer array passed
     to the `indices` parameter of the constructor.
 
-    `epochs` controls the number of repetitions; e.g. a value of `2` will
+    `repeats` controls the number of repetitions; e.g. a value of `2` will
     cause the iterator to walk the data twice before terminating. A value
     of `-1` will result in an infinite number of repetitions. If
     shuffling is used a different permutation of the elements in the data
@@ -684,7 +688,7 @@ class ArrayDataSource (RandomAccessDataSource):
     indices: NumPy array, 1D dtype=int or None
         An array of indices that identify the subset of samples drawn
         from data that are to be used
-    epochs: int (default=1)
+    repeats: int (default=1)
         The number of repetitions, or `-1` for infinite. A value of 0 or
         a negative value that is not -1 will cause `ValueError` to be
         raised.
@@ -720,20 +724,20 @@ class ArrayDataSource (RandomAccessDataSource):
     ...     # Perform operations on batch_X and batch_y
     ...     pass
 
-    The `epochs` parameter will cause the iterator to walk over the data
+    The `repeats` parameter will cause the iterator to walk over the data
     a specified number of times:
-    >>> ds_10 = ArrayDataSource([X, y], epochs=10)
+    >>> ds_10 = ArrayDataSource([X, y], repeats=10)
     >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=rng):
     ...     # Perform operations on batch_X and batch_y
     ...     break
 
     If it is given the value `-1`, the iterator will repeat infinitely:
-    >>> ds_inf = ArrayDataSource([X, y], epochs=-1)
+    >>> ds_inf = ArrayDataSource([X, y], repeats=-1)
     >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=rng):
     ...     # Perform operations on batch_X and batch_y
     ...     break
     """
-    def __init__(self, data, indices=None, epochs=1):
+    def __init__(self, data, indices=None, repeats=1):
         if not isinstance(data, list):
             raise TypeError('data must be a list of array-like objects, not '
                             'a {}'.format(type(data)))
@@ -751,7 +755,7 @@ class ArrayDataSource (RandomAccessDataSource):
         self.data = data
 
         super(ArrayDataSource, self).__init__(
-            length, indices=indices, epochs=epochs)
+            length, indices=indices, repeats=repeats)
 
     def samples_by_indices_nomapping(self, indices):
         """
@@ -967,7 +971,7 @@ class CompositeDataSource (AbstractDataSource):
 
     Array data sources for labeled and unlabeled samples (the labeled samples
     are repeated infinitely, allowing us to draw as many as needed):
-    >>> lab_ds = ArrayDataSource([lab_X, lab_y], epochs=-1)
+    >>> lab_ds = ArrayDataSource([lab_X, lab_y], repeats=-1)
     >>> unlab_ds = ArrayDataSource([unlab_X])
 
     Create a data source that iterates repeatedly over the labeled samples
