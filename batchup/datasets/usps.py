@@ -4,14 +4,18 @@ import numpy as np
 from . import dataset
 
 
-def _download_usps(filename, source='http://statweb.stanford.edu/~tibs/ElemStatLearn/datasets/'):
+_USPS_SOURCE = 'http://statweb.stanford.edu/~tibs/ElemStatLearn/datasets/'
+
+
+def _download_usps(filename, source=_USPS_SOURCE):
     return dataset.download_data(filename, source + filename)
 
 
 def _load_usps_file(path):
-    # Each file is a GZIP compressed text file, each line of which consists of:
-    # ground truth class (as a float for some reason) followed by 256 values that are the pixel values
-    # in the range [-1, 1]
+    # Each file is a GZIP compressed text file, each line of which consists
+    # of:
+    # ground truth class (as a float for some reason) followed by 256 values
+    # that are the pixel values in the range [-1, 1]
     X = []
     y = []
     # Open file via gzip
@@ -19,7 +23,9 @@ def _load_usps_file(path):
         for line in f.readlines():
             sample = line.strip().split()
             y.append(int(float(sample[0])))
-            X.append(np.array([float(val) for val in sample[1:]], dtype=np.float32).reshape((1, 1, 16, 16)))
+            flat_img = [float(val) for val in sample[1:]]
+            flat_img = np.array(flat_img, dtype=np.float32)
+            X.append(flat_img.reshape((1, 1, 16, 16)))
     y = np.array(y).astype(np.int32)
     X = np.concatenate(X, axis=0).astype(np.float32)
     # Scale from [-1, 1] range to [0, 1]
