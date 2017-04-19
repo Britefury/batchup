@@ -132,8 +132,8 @@ class AbstractDataSource (object):
         """
         raise NotImplementedError
 
-    def batch_map(self, func, batch_size, progress_iter_func=None,
-                  n_batches=None, prepend_args=None, **kwargs):
+    def batch_map_concat(self, func, batch_size, progress_iter_func=None,
+                         n_batches=None, prepend_args=None, **kwargs):
         """A batch oriented implementation of `map`.
         Applies a function to all the samples in this data source by breaking
         the data into mini-batches and applying the function to each
@@ -184,7 +184,7 @@ class AbstractDataSource (object):
         >>> ds = ArrayDataSource([X])
 
         Apply the function defined above:
-        >>> X_sqr_sum = ds.batch_map(sqr_sum, batch_size=5)
+        >>> X_sqr_sum = ds.batch_map_concat(sqr_sum, batch_size=5)
         >>> assert (X_sqr_sum[0] == (X ** 2).sum(axis=1)).all()
         """
         if n_batches is None:
@@ -195,10 +195,10 @@ class AbstractDataSource (object):
             elif n is not None:
                 n_batches = _num_batches(n, batch_size)
         batch_iter = self.batch_iterator(batch_size, **kwargs)
-        return batch_map(func, batch_iter, progress_iter_func, n_batches,
-                         prepend_args)
+        return batch_map_concat(func, batch_iter, progress_iter_func,
+                                n_batches, prepend_args)
 
-    def mean_batch_map(self, func, batch_size, progress_iter_func=None,
+    def batch_map_mean(self, func, batch_size, progress_iter_func=None,
                        sum_axis=None, n_batches=None, prepend_args=None,
                        **kwargs):
         """
@@ -296,7 +296,7 @@ class AbstractDataSource (object):
         >>> ds = ArrayDataSource([pred, tgt])
 
         Apply the loss sum function defined above:
-        >>> loss = ds.mean_batch_map(binary_crossentropy_loss_sum,
+        >>> loss = ds.batch_map_mean(binary_crossentropy_loss_sum,
         ...                          batch_size=5)
         >>> assert np.allclose(
         ...     loss, binary_crossentropy_loss(pred, tgt).mean())
@@ -309,7 +309,7 @@ class AbstractDataSource (object):
             elif n is not None:
                 n_batches = _num_batches(n, batch_size)
         batch_iter = self.batch_iterator(batch_size, **kwargs)
-        return mean_batch_map(func, batch_iter, progress_iter_func,
+        return batch_map_mean(func, batch_iter, progress_iter_func,
                               sum_axis, n_batches, prepend_args)
 
     @staticmethod
@@ -1155,8 +1155,8 @@ class CompositeDataSource (AbstractDataSource):
             yield self._prepare_index_batch(batch)
 
 
-def batch_map(func, batch_iter, progress_iter_func=None,
-              batch_limit=None, prepend_args=None):
+def batch_map_concat(func, batch_iter, progress_iter_func=None,
+                     n_batches=None, prepend_args=None):
     """
     Apply a function to all the samples that are accessed as mini-batches
     obtained from an iterator.
@@ -1183,7 +1183,7 @@ def batch_map(func, batch_iter, progress_iter_func=None,
         and `False` for the `leave` parameter. By passing either
         `tqdm.tqdm` or `tqdm.tqdm_notebook` as this argument you can have
         the training loop display a progress bar.
-    batch_limit: [optional] integer
+    n_batches: [optional] integer
         Process at most this number of batches before returning.
     prepend_args: [optional] tuple
         Arguments to prepend to the arguments passed to `func`
@@ -1215,19 +1215,19 @@ def batch_map(func, batch_iter, progress_iter_func=None,
 
     Apply the function defined above:
     >>> batch_iter = ds.batch_iterator(batch_size=5)
-    >>> X_sqr_sum = batch_map(sqr_sum, batch_iter)
+    >>> X_sqr_sum = batch_map_concat(sqr_sum, batch_iter)
     >>> assert np.allclose(X_sqr_sum[0], (X ** 2).sum(axis=1))
 
     There are also cases where we wish to limit the number of batches that
     will be processed:
     - when the iterator generates an infinite number of samples
     - when the data set is huge and we wish to show results as we go
-    Use the `batch_limit` argument to limit the number of batches to process:
+    Use the `n_batches` argument to limit the number of batches to process:
     >>> X_large = np.random.normal(size=(100, 10))
     >>> ds_large = ArrayDataSource([X_large])
     >>> iter_large = ds_large.batch_iterator(batch_size=5)
     >>> for i in range(10):
-    ...     partial_result = batch_map(sqr_sum, iter_large, batch_limit=2)
+    ...     partial_result = batch_map_concat(sqr_sum, iter_large, n_batches=2)
     ...     # Should have 10 samples per partial result
     ...     assert partial_result[0].shape[0] == 10
     ...     j = i * 10
@@ -1239,7 +1239,7 @@ def batch_map(func, batch_iter, progress_iter_func=None,
 
     # If `progress_iter_func` is not `None`, apply it
     if progress_iter_func is not None:
-        batch_iter = progress_iter_func(batch_iter, total=batch_limit,
+        batch_iter = progress_iter_func(batch_iter, total=n_batches,
                                         leave=False)
 
     # Apply `func` to each batch
@@ -1267,7 +1267,7 @@ def batch_map(func, batch_iter, progress_iter_func=None,
             results.append(batch_results)
 
         n_processed += 1
-        if batch_limit is not None and n_processed >= batch_limit:
+        if n_batches is not None and n_processed >= n_batches:
             break
 
     # Concatenate result arrays
@@ -1279,8 +1279,8 @@ def batch_map(func, batch_iter, progress_iter_func=None,
         return None
 
 
-def mean_batch_map(func, batch_iter, progress_iter_func=None, sum_axis=None,
-                   batch_limit=None, prepend_args=None):
+def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
+                   n_batches=None, prepend_args=None):
     """
     Apply a function to all the samples that are accessed as mini-batches
     obtained from an iterator.
@@ -1323,7 +1323,7 @@ def mean_batch_map(func, batch_iter, progress_iter_func=None, sum_axis=None,
         per-batch sum before accumulating the losses. The total summed loss
         will be divided by the number of samples at the end in order to
         compute the mean loss.
-    batch_limit: [optional] integer that specifies the number of mini-batches
+    n_batches: [optional] integer that specifies the number of mini-batches
         to process before returning
     prepend_args: [optional] tuple
         Arguments to prepend to the arguments passed to `func`
@@ -1371,13 +1371,13 @@ def mean_batch_map(func, batch_iter, progress_iter_func=None, sum_axis=None,
 
     Apply the loss sum function defined above:
     >>> batch_iter = ds.batch_iterator(batch_size=5)
-    >>> loss = mean_batch_map(binary_crossentropy_loss_sum, batch_iter)
+    >>> loss = batch_map_mean(binary_crossentropy_loss_sum, batch_iter)
     >>> assert np.allclose(
     ...     loss, binary_crossentropy_loss(pred, tgt).mean())
 
     Have `mean_batch_map` sum over axis 0:
     >>> batch_iter = ds.batch_iterator(batch_size=5)
-    >>> loss = mean_batch_map(binary_crossentropy_loss, batch_iter,
+    >>> loss = batch_map_mean(binary_crossentropy_loss, batch_iter,
     ...                       sum_axis=0)
     >>> assert np.allclose(
     ...     loss, binary_crossentropy_loss(pred, tgt).mean())
@@ -1388,8 +1388,8 @@ def mean_batch_map(func, batch_iter, progress_iter_func=None, sum_axis=None,
     >>> ds_large = ArrayDataSource([pred_large, tgt_large])
     >>> iter_large = ds_large.batch_iterator(batch_size=5)
     >>> for i in range(10):
-    ...     partial_loss = mean_batch_map(binary_crossentropy_loss_sum,
-    ...                                   iter_large, batch_limit=2)
+    ...     partial_loss = batch_map_mean(binary_crossentropy_loss_sum,
+    ...                                   iter_large, n_batches=2)
     ...     j = i * 10
     ...     assert np.allclose(
     ...         partial_loss, binary_crossentropy_loss(
@@ -1401,7 +1401,7 @@ def mean_batch_map(func, batch_iter, progress_iter_func=None, sum_axis=None,
 
     # If `progress_iter_func` is not `None`, apply it
     if progress_iter_func is not None:
-        batch_iter = progress_iter_func(batch_iter, total=batch_limit,
+        batch_iter = progress_iter_func(batch_iter, total=n_batches,
                                         leave=False)
 
     # Train on each batch
@@ -1446,7 +1446,7 @@ def mean_batch_map(func, batch_iter, progress_iter_func=None, sum_axis=None,
         n_samples_accum += batch_n
 
         n_processed += 1
-        if batch_limit is not None and n_processed >= batch_limit:
+        if n_batches is not None and n_processed >= n_batches:
             break
 
     # Divide by the number of training examples used to compute mean
