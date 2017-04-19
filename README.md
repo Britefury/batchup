@@ -2,17 +2,33 @@
 Python library for extracting mini-batches of data from a data source for the purpose of training neural networks.
 
 
-# Examples
+# Table of Contents
 
-We will demonstrate the following examples
-
+#### Batch iteration
+Processing data in mini-batches:
 - quick batch iteration; a basic example
 - infinite batch iteration; an iterator that generates batches endlessly
 - iterating over two data sets simultaneously where their sizes differ (e.g. for semi-supervised learning)
-- iterating over data sets that are not stored as NumPy arrays (e.g. on disk or generated on the fly)
+- iterating over data sets that are NOT stored as NumPy arrays (e.g. on disk or generated on the fly)
 - parallel processing to speed up iteration where loading/preparing samples could be slow
 
-## Example 1: quick batch iteration
+#### Gathering results and loss values
+- removing the for-loop; predict values for samples in one line
+- computing mean loss/error values
+
+#### Standard datasets
+BatchUp supports some standard machine learning datasets. They will be automatically downloaded if necessary.
+- MNIST
+- SVHN
+- CIFAR-10
+- STL
+
+#### Configuring BatchUp
+Data paths, etc.
+
+
+## Batch iteration
+### Quick batch iteration
 
 Assume we have a training set loaded in the variables `train_X` and `train_y`:
 
@@ -32,7 +48,7 @@ Some notes:
 - using `shuffle=True` will use NumPy's default random number generator
 - not specifying shuffle will process the samples in-order
 
-## Example 2: infinite batch iteration
+### Infinite batch iteration
 
 Lets say you need an iterator that extracts samples from your dataset and starts from the beginning when it reaches the end:
 
@@ -46,7 +62,7 @@ The `repeats` parameter accepts either `-1` for infininte, or any positive integ
 
 This will also work if the dataset has less samples than the batch size; not a common use case but can happen in certain situations involving semi-supervised learning for instance.
 
-## Example 3: iterating over two data sources of wildly different sizes for semi-supervised learning
+### Iterating over two data sources of wildly different sizes for semi-supervised learning
 
 In semi-supervised learning we have a small dataset of labeled samples `lab_X` with ground truths `lab_y` and a larger set of unlabeled samples `unlab_X`. Lets say we want a single epoch to consist of the entire unlabeled dataset while looping over the labeled dataset repeatly. The `CompositeDataSource` class can help us here.
 
@@ -99,7 +115,7 @@ for ((batch_lab_X, batch_lab_y), (batch_unlab_X,)) in ds_struct.batch_iterator(b
 
 `CompositeDataSource` instances can be arbitrarily nested.
 
-## Example 4: using data that is not stored as NumPy arrays
+### Using data that is NOT stored as NumPy arrays
 
 The arrays passed to `ArrayDataSource` do not have to be NumPy arrays, they just have to be array-like. An array-like object should implement the `__len__` method that returns the number of samples and the `__getitem__` method that returns the samples themselves. Note that `__getitem__` should accept integer indices, slices, or NumPy integer arrays that give the indices of the samples to retrieve.
 
@@ -156,7 +172,7 @@ for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.Ran
     # Process batches here...
 ```
 
-## Example 5: using paralle processing to speed things up
+### Using parallel processing to speed things up
 
 The above example has a potential performance problem as loading the images from disk would introduce latency. We can use the `work_pool` module to prepare the mini-batches in separate processes to hide this latency.
 
@@ -185,11 +201,49 @@ for (batch_X, batch_y) in par_iter:
     # Process batches here...
 ```
 
-# Standard datasets
+
+## Gathering results and loss values
+
+We can further simplify training and evaluation procedures using the `batch_map_concat` and `batch_map_mean` methods.
+
+### Removing the for-loop; predict values for samples in one line
+
+Lets assume we have a prediction function `f_pred` of the form `f_pred(batch_X) -> batch_pred_y`. 
+If we want to predict results for our test set in `test_X`, we can do this in one line, without the for loop:
+
+```py3
+test_ds = data_source.ArrayDataSource([test_X])
+
+(pred_y,) = test_ds.batch_map_concat(f_pred, batch_size=256)
+```
+
+The `batch_map_concat` method will process all the samples in `test_X` and gather the results in a tuple of arrays, hence
+the `(pred_y,) = ...`. If you want `tqdm` ([PyPi](http://pypi.python.org/pypi/tqdm), [GitHub](http://github.com/noamraph/tqdm)) to give you a progress bar:
+
+```py3
+(pred_y,) = test_ds.batch_map_concat(f_pred, batch_size=256, progress_iter_func=tqdm.tqdm)
+```
+
+### Computing mean loss/error values
+
+Lets assume we have a evaluation function `f_eval` of the form `f_eval(batch_X, batch_y) -> [log_loss_sum, err_count]`. 
+Assuming that we are doing classification, `f_eval` returns the sum of the per-sample log-losses and the number of errors.
+The `batch_map_mean` method will process all of the data in the data source, gather loss and error counts and return the mean:
+
+```py3
+val_ds = data_source.ArrayDataSource([val_X, val_y])
+
+mean_log_loss, mean_err_rate = val_ds.batch_map_mean(f_eval, batch_size=256)
+```
+
+Note that as above, the `progress_iter_func` parameter can be passed `tqdm.tqdm` to give you a progress bar.
+
+
+## Standard datasets
 
 BatchUp provides support for using some standard datasets.
 
-## MNIST dataset
+#### MNIST dataset
 
 Load the MNIST dataset:
 ```py3
@@ -207,7 +261,7 @@ ds = mnist.MNIST(n_val=10000)
 - `ds.test_X` and `ds.test_y` contain the test samples
 
 
-## SVHN dataset
+#### SVHN dataset
 
 Load the SVHN dataset:
 ```py3
@@ -225,7 +279,7 @@ ds = svhn.SVHN(n_val=10000)
 - `ds.test_X` and `ds.test_y` contain the test samples
 
 
-## CIFAR-10 dataset
+#### CIFAR-10 dataset
 
 Load the CIFAR-10 dataset:
 ```py3
@@ -245,7 +299,7 @@ ds = cifar10.CIFAR10(n_val=5000)
     indices
 
 
-## STL dataset
+#### STL dataset
 
 Load the STL dataset:
 ```py3
@@ -263,4 +317,18 @@ ds = stl.STL(n_val_folds=1)
 - `ds.test_X_u8` and `ds.test_y` contain the test samples
 - `ds.class_names` lists the class names of the corresponding ground truth
     indices
+    
+We keep the image data in `uint8` form to save memory,
 
+
+## Configuring BatchUp (paths etc).
+
+The configuration for BatchUp lives in `.batchup.cfg` in your home directory.
+
+By default BatchUp will store its data (e.g. downloaded datasets) in a directory called `.batchup` that resides in your home directory. If you wish it to locate this data somewhere else (some of the datasets an take a few gigabytes), create the configuration file mentioned above:
+
+
+```cfg
+[paths]
+data_dir=/some/path/batchup_data
+```
