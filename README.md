@@ -7,6 +7,8 @@ Python library for extracting mini-batches of data from a data source for the pu
 #### Batch iteration
 Processing data in mini-batches:
 - quick batch iteration; a basic example
+- iterating over subsets identified by indices
+- including sample indices in the mini-batches
 - infinite batch iteration; an iterator that generates batches endlessly
 - iterating over two data sets simultaneously where their sizes differ (e.g. for semi-supervised learning)
 - iterating over data sets that are NOT stored as NumPy arrays (e.g. on disk or generated on the fly)
@@ -48,6 +50,37 @@ Some notes:
 - the last batch will be short (have less samples than the requested batch size) if there isn't enough data to fill it.
 - using `shuffle=True` will use NumPy's default random number generator
 - not specifying shuffle will process the samples in-order
+
+### Iterating over subsets identified by indices
+
+We can specify the indices of a subset of the samples in a dataset and draw mini-batches from only those samples:
+
+```py3
+import numpy as np
+
+# Randomly choose a subset of 20,000 samples, by indices
+subset_a = np.random.permutation(train_X.shape[0])[:20000]
+
+# Construct an array data source that will only draw samples whose indices are in `subset_a`
+ds = data_source.ArrayDataSource([train_X, train_y], indices=subset_a)
+
+# Drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
+
+### Including sample indices in the mini-batches
+
+We can ask to be provided with the indices of the samples that were drawn to form the mini-batch:
+
+```py3
+# Construct an array data source that will provide sample indices
+ds = data_source.ArrayDataSource([train_X, train_y], include_indices=True)
+
+# Drawing batches of 64 elements in random order
+for (batch_ndx, batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
 
 ### Infinite batch iteration
 

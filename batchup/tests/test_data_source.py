@@ -817,6 +817,132 @@ def test_ArrayDataSource_indices_repeated_small_dataset():
     check_batches(batches, 10, order, 64)
 
 
+def test_ArrayDataSource_include_indices():
+    from batchup import data_source
+
+    # Test `len(ds)`
+    a3a = np.arange(3)
+    a3b = np.arange(6).reshape((3, 2))
+    a10 = np.arange(10)
+
+    assert data_source.ArrayDataSource([a3a]).num_samples() == 3
+    assert data_source.ArrayDataSource([a10]).num_samples() == 10
+    assert data_source.ArrayDataSource([a3a, a3b]).num_samples() == 3
+
+    X = np.arange(90)
+    Y = np.arange(180).reshape((90, 2))
+    indices = np.random.permutation(90)[:45]
+    ads = data_source.ArrayDataSource([X[:45], Y[:45]], include_indices=True)
+    ads_sub = data_source.ArrayDataSource([X, Y], indices=indices,
+                                          include_indices=True)
+
+    # Test `samples_by_indices_nomapping`
+    batch = ads.samples_by_indices_nomapping(np.arange(15))
+    assert (batch[0] == np.arange(15)).all()
+    assert (batch[1] == X[:15]).all()
+    assert (batch[2] == Y[:15]).all()
+
+    batch = ads_sub.samples_by_indices_nomapping(np.arange(15))
+    assert (batch[0] == np.arange(15)).all()
+    assert (batch[1] == X[:15]).all()
+    assert (batch[2] == Y[:15]).all()
+
+    # Test `samples_by_indices`
+    batch = ads.samples_by_indices(np.arange(15))
+    assert (batch[0] == np.arange(15)).all()
+    assert (batch[1] == X[:15]).all()
+    assert (batch[2] == Y[:15]).all()
+
+    batch = ads_sub.samples_by_indices(np.arange(15))
+    assert (batch[0] == indices[:15]).all()
+    assert (batch[1] == X[indices[:15]]).all()
+    assert (batch[2] == Y[indices[:15]]).all()
+
+    # Test `batch_iterator`
+
+    # Three in-order batches
+    batches = list(ads.batch_iterator(batch_size=15))
+    # Three batches
+    assert len(batches) == 3
+    # Two items in each batch
+    assert len(batches[0]) == 3
+    assert len(batches[1]) == 3
+    assert len(batches[2]) == 3
+    # Verify values
+    assert (batches[0][0] == np.arange(15)).all()
+    assert (batches[0][1] == X[:15]).all()
+    assert (batches[0][2] == Y[:15]).all()
+    assert (batches[1][0] == np.arange(15, 30)).all()
+    assert (batches[1][1] == X[15:30]).all()
+    assert (batches[1][2] == Y[15:30]).all()
+    assert (batches[2][0] == np.arange(30, 45)).all()
+    assert (batches[2][1] == X[30:45]).all()
+    assert (batches[2][2] == Y[30:45]).all()
+
+    # Three in-order batches
+    batches = list(ads_sub.batch_iterator(batch_size=15))
+    # Three batches
+    assert len(batches) == 3
+    # Two items in each batch
+    assert len(batches[0]) == 3
+    assert len(batches[1]) == 3
+    assert len(batches[2]) == 3
+    # Verify values
+    assert (batches[0][0] == indices[:15]).all()
+    assert (batches[0][1] == X[indices[:15]]).all()
+    assert (batches[0][2] == Y[indices[:15]]).all()
+    assert (batches[1][0] == indices[15:30]).all()
+    assert (batches[1][1] == X[indices[15:30]]).all()
+    assert (batches[1][2] == Y[indices[15:30]]).all()
+    assert (batches[2][0] == indices[30:]).all()
+    assert (batches[2][1] == X[indices[30:]]).all()
+    assert (batches[2][2] == Y[indices[30:]]).all()
+
+    # Three shuffled batches
+    batches = list(ads.batch_iterator(
+        batch_size=15, shuffle=np.random.RandomState(12345)))
+    # Get the expected order
+    order = np.random.RandomState(12345).permutation(45)
+    # Three batches
+    assert len(batches) == 3
+    # Two items in each batch
+    assert len(batches[0]) == 3
+    assert len(batches[1]) == 3
+    assert len(batches[2]) == 3
+    # Verify values
+    assert (batches[0][0] == order[:15]).all()
+    assert (batches[0][1] == X[order[:15]]).all()
+    assert (batches[0][2] == Y[order[:15]]).all()
+    assert (batches[1][0] == order[15:30]).all()
+    assert (batches[1][1] == X[order[15:30]]).all()
+    assert (batches[1][2] == Y[order[15:30]]).all()
+    assert (batches[2][0] == order[30:45]).all()
+    assert (batches[2][1] == X[order[30:45]]).all()
+    assert (batches[2][2] == Y[order[30:45]]).all()
+
+    # Three shuffled batches
+    batches = list(ads_sub.batch_iterator(
+        batch_size=15, shuffle=np.random.RandomState(12345)))
+    # Get the expected order
+    order = np.random.RandomState(12345).permutation(45)
+    # Three batches
+    assert len(batches) == 3
+    # Two items in each batch
+    assert len(batches[0]) == 3
+    assert len(batches[1]) == 3
+    assert len(batches[2]) == 3
+    # Verify values
+    assert (batches[0][0] == indices[order[:15]]).all()
+    assert (batches[0][1] == X[indices[order[:15]]]).all()
+    assert (batches[0][2] == Y[indices[order[:15]]]).all()
+    assert (batches[1][0] == indices[order[15:30]]).all()
+    assert (batches[1][1] == X[indices[order[15:30]]]).all()
+    assert (batches[1][2] == Y[indices[order[15:30]]]).all()
+    assert (batches[2][0] == indices[order[30:]]).all()
+    assert (batches[2][1] == X[indices[order[30:]]]).all()
+    assert (batches[2][2] == Y[indices[order[30:]]]).all()
+
+
 def test_CallableDataSource():
     from batchup import data_source
 
