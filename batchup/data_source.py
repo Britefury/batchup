@@ -337,9 +337,14 @@ class RandomAccessDataSource (AbstractDataSource):
         The number of repetitions, or `-1` for infinite. A value of 0 or
         a negative value that is not -1 will cause `ValueError` to be
         raised.
+    include_indices: bool (default=False)
+        If `True`, each mini-batch generated will be prefixed with an
+        array that provides the indices of the samples that were drawn
+        to make the mini-batch
 
     """
-    def __init__(self, length, indices=None, repeats=1):
+    def __init__(self, length, indices=None, repeats=1,
+                 include_indices=False):
         """
         Constructor for random access data source
 
@@ -354,12 +359,17 @@ class RandomAccessDataSource (AbstractDataSource):
             The number of repetitions, or `-1` for infinite. A value of 0 or
             a negative value that is not -1 will cause `ValueError` to be
             raised.
+        include_indices: bool (default=False)
+            If `True`, each mini-batch generated will be prefixed with an
+            array that provides the indices of the samples that were drawn
+            to make the mini-batch
         """
         if repeats == 0 or repeats < -1:
             raise ValueError('Invalid number of repeats; should be >= 1 or '
                              '-1, not {}'.format(repeats))
         self.indices = indices
         self.repeats = repeats
+        self.include_indices = include_indices
         if self.indices is not None:
             # The number of samples is the size of `indices`
             self.length = len(self.indices)
@@ -465,7 +475,7 @@ class RandomAccessDataSource (AbstractDataSource):
         shuffle: `numpy.random.RandomState` or `True` or `None`
             Used to randomise element order. If `None`, elements will be
             extracted in order. If it is a `RandomState` instance, that
-            RNG will be used to shuffle elements. If it is `True`, Lasagne's
+            RNG will be used to shuffle elements. If it is `True`, NumPy's
             default RNG will be used.
 
         Returns
@@ -623,7 +633,7 @@ class RandomAccessDataSource (AbstractDataSource):
         If `shuffle` is `None` or `False` elements will be extracted in
         order. If it is a `numpy.random.RandomState`, it will be used to
         randomise the order in which elements are extracted from the data.
-        If it is `True`, Lasagne's default random number generator will be
+        If it is `True`, NumPy's default random number generator will be
         use to shuffle elements.
 
         If an array of indices was provided to the constructor, the subset of
@@ -639,7 +649,7 @@ class RandomAccessDataSource (AbstractDataSource):
         shuffle: `numpy.random.RandomState` or `True` or `None`
             Used to randomise element order. If `None`, elements will be
             extracted in order. If it is a `RandomState` instance, that
-            RNG will be used to shuffle elements. If it is `True`, Lasagne's
+            RNG will be used to shuffle elements. If it is `True`, NumPy's
             default RNG will be used.
 
         Returns
@@ -681,7 +691,7 @@ class ArrayDataSource (RandomAccessDataSource):
     data set exactly, the last batch will containing the remaining elements
     and will be 'short'.
 
-    Parameters
+    Attributes
     ----------
     data: list
         A list of arrays from which data is drawn.
@@ -692,6 +702,10 @@ class ArrayDataSource (RandomAccessDataSource):
         The number of repetitions, or `-1` for infinite. A value of 0 or
         a negative value that is not -1 will cause `ValueError` to be
         raised.
+    include_indices: bool (default=False)
+        If `True`, each mini-batch generated will be prefixed with an
+        array that provides the indices of the samples that were drawn
+        to make the mini-batch
 
     Examples:
     Create a data set of size 12, where each input sample is a 7-element
@@ -713,14 +727,20 @@ class ArrayDataSource (RandomAccessDataSource):
     ...     pass
 
     Iterate over data, drawing 5-element mini-batches, shuffled randomly
-    using Lasagne's default random number generator:
+    using NumPy's default random number generator:
     >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=True):
     ...     # Perform operations on batch_X and batch_y
     ...     pass
 
-    Randomly choose 5 samples and use only those:
+    Only draw from a subset of the available samples:
     >>> dsi = ArrayDataSource([X, y], indices=np.random.permutation(10)[:5])
     >>> for batch_X, batch_y in dsi.batch_iterator(5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     pass
+
+    Include the sample indices in the mini-batches:
+    >>> dsn = ArrayDataSource([X, y], include_indices=True)
+    >>> for batch_ndx, batch_X, batch_y in dsn.batch_iterator(5):
     ...     # Perform operations on batch_X and batch_y
     ...     pass
 
@@ -737,7 +757,24 @@ class ArrayDataSource (RandomAccessDataSource):
     ...     # Perform operations on batch_X and batch_y
     ...     break
     """
-    def __init__(self, data, indices=None, repeats=1):
+    def __init__(self, data, indices=None, repeats=1, include_indices=False):
+        """
+        Parameters
+        ----------
+        data: list
+            A list of arrays from which data is drawn.
+        indices: NumPy array, 1D dtype=int or None
+            An array of indices that identify the subset of samples drawn
+            from data that are to be used
+        repeats: int (default=1)
+            The number of repetitions, or `-1` for infinite. A value of 0 or
+            a negative value that is not -1 will cause `ValueError` to be
+            raised.
+        include_indices: bool (default=False)
+            If `True`, each mini-batch generated will be prefixed with an
+            array that provides the indices of the samples that were drawn
+            to make the mini-batch
+        """
         if not isinstance(data, list):
             raise TypeError('data must be a list of array-like objects, not '
                             'a {}'.format(type(data)))
@@ -755,7 +792,8 @@ class ArrayDataSource (RandomAccessDataSource):
         self.data = data
 
         super(ArrayDataSource, self).__init__(
-            length, indices=indices, repeats=repeats)
+            length, indices=indices, repeats=repeats,
+            include_indices=include_indices)
 
     def samples_by_indices_nomapping(self, indices):
         """
@@ -773,7 +811,14 @@ class ArrayDataSource (RandomAccessDataSource):
         list of arrays
             A mini-batch in the form of a list of NumPy arrays
         """
-        return [d[indices] for d in self.data]
+        batch = [d[indices] for d in self.data]
+        if self.include_indices:
+            if isinstance(indices, slice):
+                indices = np.arange(indices.start, indices.stop,
+                                    indices.step)
+            return [indices] + batch
+        else:
+            return batch
 
 
 class CallableDataSource (AbstractDataSource):
