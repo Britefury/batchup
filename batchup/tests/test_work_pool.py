@@ -126,3 +126,36 @@ def test_parallel_data_source(pool):
                                     shuffle=np.random.RandomState(12345))
     with pytest.raises(ValueError):
         next(peds_iter)
+
+
+def test_parallel_data_source_with_index_mapping(pool):
+    from batchup import data_source
+
+    X = np.zeros((100,), dtype=int)
+    indices = np.random.RandomState(12345).permutation(100)
+    indices0 = indices[:50]
+    indices1 = indices[50:]
+    X[indices1] = 1
+
+    ds0 = data_source.ArrayDataSource([X], indices=indices0)
+    ds1 = data_source.ArrayDataSource([X], indices=indices1)
+    pds0 = pool.parallel_data_source(ds0)
+    pds1 = pool.parallel_data_source(ds1)
+
+    # Check number of samples
+    assert ds0.num_samples() == 50
+    assert ds1.num_samples() == 50
+    assert pds0.num_samples() == 50
+    assert pds1.num_samples() == 50
+
+    BATCHSIZE = 10
+
+    for batch_X, in pds0.batch_iterator(
+            batch_size=BATCHSIZE, shuffle=np.random.RandomState(12345)):
+        # Ensure that all the return values are 0
+        assert (batch_X == 0).all()
+
+    for batch_X, in pds1.batch_iterator(
+            batch_size=BATCHSIZE, shuffle=np.random.RandomState(12345)):
+        # Ensure that all the return values are 0
+        assert (batch_X == 1).all()

@@ -179,7 +179,7 @@ class WorkerPool(object):
 
 
 def _pds_extract_helper(data, batch_indices):  # pragma: no cover
-    return data.samples_by_indices(batch_indices)
+    return data.samples_by_indices_nomapping(batch_indices)
 
 
 class ParallelDataSource(data_source.AbstractDataSource):
