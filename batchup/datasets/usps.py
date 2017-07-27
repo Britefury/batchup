@@ -1,44 +1,26 @@
-import gzip
 import numpy as np
+import tables
 
 from . import dataset
 
 
-_USPS_SOURCE = 'http://statweb.stanford.edu/~tibs/ElemStatLearn/datasets/'
+_USPS_SOURCE = 'https://github.com/Britefury/usps_dataset/raw/master/usps.h5'
 
 
-def _download_usps(filename, source=_USPS_SOURCE):
-    return dataset.download_data(filename, source + filename)
-
-
-def _load_usps_file(path):
-    # Each file is a GZIP compressed text file, each line of which consists
-    # of:
-    # ground truth class (as a float for some reason) followed by 256 values
-    # that are the pixel values in the range [-1, 1]
-    X = []
-    y = []
-    # Open file via gzip
-    with gzip.open(path, 'r') as f:
-        for line in f.readlines():
-            sample = line.strip().split()
-            y.append(int(float(sample[0])))
-            flat_img = [float(val) for val in sample[1:]]
-            flat_img = np.array(flat_img, dtype=np.float32)
-            X.append(flat_img.reshape((1, 1, 16, 16)))
-    y = np.array(y).astype(np.int32)
-    X = np.concatenate(X, axis=0).astype(np.float32)
-    # Scale from [-1, 1] range to [0, 1]
-    return X * 0.5 + 0.5, y
+def _download_usps(source=_USPS_SOURCE):
+    return dataset.download_data('usps.h5', source)
 
 
 def _load_usps():
     # Download if necessary
-    train_path = _download_usps('zip.train.gz')
-    test_path = _download_usps('zip.test.gz')
+    data_path = _download_usps()
 
-    train_X, train_y = _load_usps_file(train_path)
-    test_X, test_y = _load_usps_file(test_path)
+    f = tables.open_file(data_path, mode='r')
+
+    train_X = f.root.usps.train_X
+    train_y = f.root.usps.train_y
+    test_X = f.root.usps.test_X
+    test_y = f.root.usps.test_y
 
     return train_X, train_y, test_X, test_y
 

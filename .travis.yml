@@ -12,7 +12,7 @@ addons:
 before_install:
   - pip install -U pip
 install:
-  - travis_wait travis_retry pip install --only-binary=numpy,scipy numpy scipy
+  - travis_wait travis_retry pip install --only-binary=numpy,scipy,tables numpy scipy tables
   - travis_wait travis_retry pip install -r requirements-dev.txt
   - travis_retry pip install python-coveralls
   - travis_retry python setup.py dev

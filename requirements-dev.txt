@@ -1,4 +1,5 @@
 numpy
+tables
 scipy
 joblib
 pytest
