@@ -1508,6 +1508,123 @@ def test_CompositeDataSource_no_random_access():
         next(gan_ds.samples_by_indices_nomapping(np.arange(10)))
 
 
+def test_MapDataSource():
+    from batchup import data_source
+
+    # Build some arrays and construct an `ArrayDataSource` for working with
+    # them
+    X = np.arange(90)
+    Y = np.arange(180).reshape((90, 2))
+    indices = np.random.RandomState(12345).permutation(90)[:45]
+    ds = data_source.ArrayDataSource([X, Y], indices=indices)
+
+    # Define a function that augments the batches with values that are double
+    # the input
+    def augment(batch_X, batch_Y):
+        return [batch_X, batch_Y, batch_X * 2, batch_Y * 2]
+
+    # Build map data source using `map` method
+    mds = ds.map(augment)
+
+    # Check the type and contents
+    assert isinstance(mds, data_source.MapDataSource)
+    assert mds.source is ds
+    assert mds.fn is augment
+
+    # Test `num_samples` method
+    assert mds.num_samples() == 45
+
+    # Ensure that it is random access as the underlying data source (`ds`) is
+    assert mds.is_random_access
+
+    # Test random access methods
+    batch = mds.samples_by_indices_nomapping(np.arange(5))
+    assert (batch[0] == X[:5]).all()
+    assert (batch[1] == Y[:5]).all()
+    assert (batch[2] == X[:5] * 2).all()
+    assert (batch[3] == Y[:5] * 2).all()
+
+    batch = mds.samples_by_indices(np.arange(5))
+    assert (batch[0] == X[indices[:5]]).all()
+    assert (batch[1] == Y[indices[:5]]).all()
+    assert (batch[2] == X[indices[:5]] * 2).all()
+    assert (batch[3] == Y[indices[:5]] * 2).all()
+
+    # Test `batch_iterator`
+
+    # Three in-order batches
+    batches = list(mds.batch_iterator(batch_size=15))
+    # Three batches
+    assert len(batches) == 3
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    # Verify values
+    assert (batches[0][0] == X[indices[:15]]).all()
+    assert (batches[0][1] == Y[indices[:15]]).all()
+    assert (batches[0][2] == X[indices[:15]] * 2).all()
+    assert (batches[0][3] == Y[indices[:15]] * 2).all()
+    assert (batches[1][0] == X[indices[15:30]]).all()
+    assert (batches[1][1] == Y[indices[15:30]]).all()
+    assert (batches[1][2] == X[indices[15:30]] * 2).all()
+    assert (batches[1][3] == Y[indices[15:30]] * 2).all()
+    assert (batches[2][0] == X[indices[30:]]).all()
+    assert (batches[2][1] == Y[indices[30:]]).all()
+    assert (batches[2][2] == X[indices[30:]] * 2).all()
+    assert (batches[2][3] == Y[indices[30:]] * 2).all()
+
+    # Three shuffled batches
+    batches = list(mds.batch_iterator(
+        batch_size=15, shuffle=np.random.RandomState(12345)))
+    # Get the expected order
+    order = np.random.RandomState(12345).permutation(45)
+    # Three batches
+    assert len(batches) == 3
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    # Verify values
+    assert (batches[0][0] == X[indices[order[:15]]]).all()
+    assert (batches[0][1] == Y[indices[order[:15]]]).all()
+    assert (batches[0][2] == X[indices[order[:15]]] * 2).all()
+    assert (batches[0][3] == Y[indices[order[:15]]] * 2).all()
+    assert (batches[1][0] == X[indices[order[15:30]]]).all()
+    assert (batches[1][1] == Y[indices[order[15:30]]]).all()
+    assert (batches[1][2] == X[indices[order[15:30]]] * 2).all()
+    assert (batches[1][3] == Y[indices[order[15:30]]] * 2).all()
+    assert (batches[2][0] == X[indices[order[30:]]]).all()
+    assert (batches[2][1] == Y[indices[order[30:]]]).all()
+    assert (batches[2][2] == X[indices[order[30:]]] * 2).all()
+    assert (batches[2][3] == Y[indices[order[30:]]] * 2).all()
+
+    # Test `batch_indices_iterator`
+    ndx_batches = list(mds.batch_indices_iterator(batch_size=15))
+    # Three batches
+    assert len(ndx_batches) == 3
+    # Verify values
+    assert (ndx_batches[0] == indices[:15]).all()
+    assert (ndx_batches[1] == indices[15:30]).all()
+    assert (ndx_batches[2] == indices[30:]).all()
+
+    # Check non-random access data source
+    bic = make_batch_iterator_callable(X, Y)
+    call_ds = data_source.CallableDataSource(bic)
+    m_call_ds = call_ds.map(augment)
+
+    assert not m_call_ds.is_random_access
+
+    with pytest.raises(TypeError):
+        next(m_call_ds.batch_indices_iterator(batch_size=10))
+
+    with pytest.raises(TypeError):
+        next(m_call_ds.samples_by_indices(np.arange(10)))
+
+    with pytest.raises(TypeError):
+        next(m_call_ds.samples_by_indices_nomapping(np.arange(10)))
+
+
 def test_batch_map():
     from batchup import data_source
 
