@@ -132,6 +132,14 @@ class AbstractDataSource (object):
         """
         raise NotImplementedError
 
+    def map(self, fn):
+        """
+        Convenience method for constructing a `MapDataSource`
+        :param fn:
+        :return:
+        """
+        return MapDataSource(self, fn)
+
     def batch_map_concat(self, func, batch_size, progress_iter_func=None,
                          n_batches=None, prepend_args=None, **kwargs):
         """A batch oriented implementation of `map`.
@@ -1198,6 +1206,148 @@ class CompositeDataSource (AbstractDataSource):
 
         for batch in six.moves.zip(*iterators):
             yield self._prepare_index_batch(batch)
+
+
+class MapDataSource (AbstractDataSource):
+    """A data source that applies a function to each mini-batch generated
+    by a component data source. Analagous to applying the `map` function.
+
+    A common use of `MapDataSource` would be to apply post-processing
+    to the samples in the mini-batch, e.g. data augmentation.
+
+    Create 10 samples and a data source for iterating over them:
+    >>> X = np.random.normal(size=(10, 10)) * 10.0 + 5.0
+    >>> y = np.random.randint(0, 10, size=(10,))
+    >>> ds = ArrayDataSource([X, y])
+
+    Define a function for augmenting each sample in X:
+    >>> def augment(batch_X, batch_y):
+    ...     aug_shape = (batch_X.shape[0], 1)
+    ...     scale_X = np.exp(np.random.normal(size=aug_shape) * 0.1)
+    ...     offset_X = np.random.normal(size=aug_shape) * 0.1
+    ...     return [batch_X * scale_X + offset_X, batch_y]
+
+    Create a `MapDataSource` that augments each sample extracted
+    from the array:
+    >>> aug_ds = MapDataSource(ds, augment)
+
+    Iterating over batches from `aug_ds`:
+    >>> for batch in aug_ds.batch_iterator(batch_size=5):
+    ...     batch_X, batch_y = batch
+
+    Is equivalent to applying `augment` like so:
+    >>> for batch in ds.batch_iterator(batch_size=5):
+    ...     batch_X, batch_y = augment(*batch)
+    """
+    def __init__(self, source, fn):
+        """
+        Constructor.
+
+        Parameters
+        ----------
+        source: AbstractDataSource
+            The data source from mini-batches are to be drawn
+
+        fn: function(batch_X, batch_y, ...) -> [out_X, out_y, ...]
+            Function that will be applied to each mini-batch.
+        """
+        self.source = source
+        self.fn = fn
+        self._random_access = source.is_random_access
+
+    @property
+    def is_random_access(self):
+        """
+        Determine if this data source is 'random access'.
+        If so, the `samples_by_indices_nomapping` and
+        `batch_indices_iterator` methods will be available
+
+        Returns
+        -------
+        bool
+            `True` if random access
+        """
+        return self._random_access
+
+    def num_samples(self, **kwargs):
+        return self.source.num_samples(**kwargs)
+
+    def batch_iterator(self, batch_size, **kwargs):
+        for batch in self.source.batch_iterator(batch_size, **kwargs):
+            yield self.fn(*batch)
+
+    def samples_by_indices_nomapping(self, indices):
+        """
+        Gather a batch of samples by indices *without* applying any index
+        mapping.
+
+        Parameters
+        ----------
+        indices: 1D-array of ints or slice
+            An index array or a slice that selects the samples to retrieve
+
+        Returns
+        -------
+        nested list of arrays
+            A mini-batch
+        """
+        if not self._random_access:
+            raise TypeError('samples_by_indices_nomapping method not '
+                            'supported as one or more of the underlying '
+                            'data sources does not support random access')
+        batch = self.source.samples_by_indices_nomapping(indices)
+        return self.fn(*batch)
+
+    def samples_by_indices(self, indices):
+        """
+        Gather a batch of samples by indices, applying any index
+        mapping defined by the underlying data sources.
+
+        Parameters
+        ----------
+        indices: 1D-array of ints or slice
+            An index array or a slice that selects the samples to retrieve
+
+        Returns
+        -------
+        nested list of arrays
+            A mini-batch
+        """
+        if not self._random_access:
+            raise TypeError('samples_by_indices method not supported as one '
+                            'or more of the underlying data sources does '
+                            'not support random access')
+        batch = self.source.samples_by_indices(indices)
+        return self.fn(*batch)
+
+    def batch_indices_iterator(self, batch_size, **kwargs):
+        """
+        Create an iterator that generates mini-batch sample indices
+
+        The generated mini-batches indices take the form of nested lists of
+        either:
+        - 1D NumPy integer arrays
+        - slices
+
+        The list nesting structure with match that of the tree of data sources
+        rooted at `self`
+
+        Parameters
+        ----------
+        batch_size: int
+            Mini-batch size
+
+        Returns
+        -------
+        iterator
+            An iterator that generates items that are nested lists of slices
+            or 1D NumPy integer arrays.
+        """
+        if not self._random_access:
+            raise TypeError('batch_indices_iterator method not supported as '
+                            'one or more of the underlying data sources '
+                            'does not support random access')
+        return self.source.batch_indices_iterator(batch_size, **kwargs)
 
 
 def batch_map_concat(func, batch_iter, progress_iter_func=None,
