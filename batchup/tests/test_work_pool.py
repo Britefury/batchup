@@ -84,7 +84,7 @@ def test_parallel_data_source(pool):
     for batch in pds.batch_iterator(
             batch_size=BATCHSIZE, shuffle=np.random.RandomState(12345)):
         # batch should be a list
-        assert isinstance(batch, list)
+        assert isinstance(batch, tuple)
         # batch should contain two arrays
         assert len(batch) == 2
         # each array should be of length BATCHSIZE

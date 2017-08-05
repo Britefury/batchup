@@ -37,7 +37,7 @@ def _length_of_batch(batch):
     `batch` can be:
     - a NumPy array, in which case `len(batch)` (size of first axis) will
       be returned
-    - a list or tuple, in which case `_length_of_batch` will be invoked
+    - a tuple, in which case `_length_of_batch` will be invoked
       (recursively) on the first element
 
     As a consequence, mini-batches can be structured; lists and tuples can
@@ -45,14 +45,14 @@ def _length_of_batch(batch):
 
     Parameters
     ----------
-    batch: list, tuple or NumPy array
+    batch: tuple or NumPy array
         a mini-batch
 
     Returns
     -------
     int: the number of samples in the mini-batch
     """
-    if isinstance(batch, (list, tuple)):
+    if isinstance(batch, tuple):
         return _length_of_batch(batch[0])
     else:
         return len(batch)
@@ -64,26 +64,26 @@ def _trim_batch(batch, length):
     `batch` can be:
     - a NumPy array, in which case it's first axis will be trimmed to size
       `length`
-    - a list or tuple, in which case `_trim_batch` applied recursively to
-      each element and the resulting list returned
+    - a tuple, in which case `_trim_batch` applied recursively to
+      each element and the resulting tuple returned
 
     As a consequence, mini-batches can be structured; lists and tuples can
     be nested arbitrarily deep.
 
     Parameters
     ----------
-    batch: list, tuple or NumPy array
+    batch: tuple or NumPy array
         the mini-batch to trim
     length: int
         the size to which `batch` is to be trimmed
 
     Returns
     -------
-    list or NumPy array of same structure as `batch`
+    tuple or NumPy array of same structure as `batch`
     The trimmed mini-batch
     """
-    if isinstance(batch, (list, tuple)):
-        return [_trim_batch(b, length) for b in batch]
+    if isinstance(batch, tuple):
+        return tuple([_trim_batch(b, length) for b in batch])
     else:
         return batch[:length]
 
@@ -819,12 +819,12 @@ class ArrayDataSource (RandomAccessDataSource):
         list of arrays
             A mini-batch in the form of a list of NumPy arrays
         """
-        batch = [d[indices] for d in self.data]
+        batch = tuple([d[indices] for d in self.data])
         if self.include_indices:
             if isinstance(indices, slice):
                 indices = np.arange(indices.start, indices.stop,
                                     indices.step)
-            return [indices] + batch
+            return (indices,) + batch
         else:
             return batch
 
@@ -946,7 +946,7 @@ class IteratorDataSource (AbstractDataSource):
     Function to build batch iterator:
     >>> def make_batch_iterator(batch_size):
     ...     for i in range(0, X.shape[0], batch_size):
-    ...         yield [X[i:i + batch_size]]
+    ...         yield (X[i:i + batch_size],)
 
     Build batch iterator:
     >>> batch_iter = make_batch_iterator(5)
@@ -1060,27 +1060,29 @@ class CompositeDataSource (AbstractDataSource):
     ...     assert batch[1][0].shape == (5, 10)
     ...     break
     """
-    def __init__(self, datasets, flatten=True):
+    def __init__(self, datasets, flatten=True, trim=True):
         self.datasets = datasets
         self.flatten = flatten
+        self.trim = trim
         self._random_access = True
         for ds in datasets:
             if not ds.is_random_access:
                 self._random_access = False
 
     def _prepare_batch(self, batch):
-        # Get the lengths of all the sub-batches
-        sub_lens = [_length_of_batch(sub_batch) for sub_batch in batch]
-        # Get the minimum length
-        trim_len = min(sub_lens)
-        # If its not the same as the maximum length, we need to trim
-        if trim_len != max(sub_lens):
-            batch = _trim_batch(batch, trim_len)
+        if self.trim:
+            # Get the lengths of all the sub-batches
+            sub_lens = [_length_of_batch(sub_batch) for sub_batch in batch]
+            # Get the minimum length
+            trim_len = min(sub_lens)
+            # If its not the same as the maximum length, we need to trim
+            if trim_len != max(sub_lens):
+                batch = _trim_batch(batch, trim_len)
 
         if self.flatten:
-            return sum(batch, [])
+            return sum(batch, ())
         else:
-            return list(batch)
+            return tuple(batch)
 
     def _prepare_index_batch(self, batch):
         # Get the lengths of all the sub-batches
@@ -1141,8 +1143,8 @@ class CompositeDataSource (AbstractDataSource):
                 'length mis-match: indices has {} items, self has {} data '
                 'sources, should be equal'.format(len(indices),
                                                   len(self.datasets)))
-        batch = [ds.samples_by_indices_nomapping(ndx)
-                 for ds, ndx in zip(self.datasets, indices)]
+        batch = tuple([ds.samples_by_indices_nomapping(ndx)
+                       for ds, ndx in zip(self.datasets, indices)])
         return self._prepare_batch(batch)
 
     def samples_by_indices(self, indices):
@@ -1170,8 +1172,8 @@ class CompositeDataSource (AbstractDataSource):
                 'length mis-match: indices has {} items, self has {} data '
                 'sources, should be equal'.format(len(indices),
                                                   len(self.datasets)))
-        batch = [ds.samples_by_indices_nomapping(ndx)
-                 for ds, ndx in zip(self.datasets, indices)]
+        batch = tuple([ds.samples_by_indices_nomapping(ndx)
+                       for ds, ndx in zip(self.datasets, indices)])
         return self._prepare_batch(batch)
 
     def batch_indices_iterator(self, batch_size, **kwargs):
@@ -1225,7 +1227,7 @@ class MapDataSource (AbstractDataSource):
     ...     aug_shape = (batch_X.shape[0], 1)
     ...     scale_X = np.exp(np.random.normal(size=aug_shape) * 0.1)
     ...     offset_X = np.random.normal(size=aug_shape) * 0.1
-    ...     return [batch_X * scale_X + offset_X, batch_y]
+    ...     return (batch_X * scale_X + offset_X, batch_y)
 
     Create a `MapDataSource` that augments each sample extracted
     from the array:
@@ -1468,7 +1470,7 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
     # Concatenate result arrays
     if len(results) > 0:
         results = zip(*results)
-        results = [np.concatenate(list(r), axis=0) for r in results]
+        results = tuple([np.concatenate(list(r), axis=0) for r in results])
         return results
     else:
         return None
@@ -1646,8 +1648,8 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
 
     # Divide by the number of training examples used to compute mean
     if results_accum is not None:
-        results_accum = [np.array(r).astype(float) / n_samples_accum
-                         for r in results_accum]
+        results_accum = tuple([np.array(r).astype(float) / n_samples_accum
+                               for r in results_accum])
 
     return results_accum
 
