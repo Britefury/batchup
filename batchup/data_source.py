@@ -525,9 +525,9 @@ class RandomAccessDataSource (AbstractDataSource):
                     else:
                         # Multiple restarts required to fill the batch
                         batch_ndx = np.arange(0)
-                        while batch_ndx.shape[0] < batch_size:
+                        while len(batch_ndx) < batch_size:
                             # Wrap over
-                            k = min(batch_size - batch_ndx.shape[0],
+                            k = min(batch_size - len(batch_ndx),
                                     self.length - i)
                             batch_ndx = np.append(
                                 batch_ndx, indices[i:i + k], axis=0)
@@ -546,7 +546,7 @@ class RandomAccessDataSource (AbstractDataSource):
                                 if repeats == 0:
                                     break
 
-                        if batch_ndx.shape[0] > 0:
+                        if len(batch_ndx) > 0:
                             yield batch_ndx
                         if repeats == 0:
                             break
@@ -562,9 +562,9 @@ class RandomAccessDataSource (AbstractDataSource):
                         else:
                             # Multiple restarts required to fill the batch
                             batch_ndx = np.arange(0)
-                            while batch_ndx.shape[0] < batch_size:
+                            while len(batch_ndx) < batch_size:
                                 # Wrap over
-                                k = min(batch_size - batch_ndx.shape[0],
+                                k = min(batch_size - len(batch_ndx),
                                         self.length - i)
                                 batch_ndx = np.append(
                                     batch_ndx, self.indices[i:i + k], axis=0)
@@ -577,7 +577,7 @@ class RandomAccessDataSource (AbstractDataSource):
                                     if repeats == 0:
                                         break
 
-                            if batch_ndx.shape[0] > 0:
+                            if len(batch_ndx) > 0:
                                 yield batch_ndx
                             if repeats == 0:
                                 break
@@ -611,9 +611,9 @@ class RandomAccessDataSource (AbstractDataSource):
                             # Multiple restarts required to fill the batch
                             batch_ndx = np.arange(0)
                             # i = 0
-                            while batch_ndx.shape[0] < batch_size:
+                            while len(batch_ndx) < batch_size:
                                 # Wrap over
-                                k = min(batch_size - batch_ndx.shape[0],
+                                k = min(batch_size - len(batch_ndx),
                                         self.length - i)
                                 batch_ndx = np.append(
                                     batch_ndx, np.arange(i, i + k), axis=0)
@@ -626,7 +626,7 @@ class RandomAccessDataSource (AbstractDataSource):
                                     if repeats == 0:
                                         break
 
-                            if batch_ndx.shape[0] > 0:
+                            if len(batch_ndx) > 0:
                                 yield batch_ndx
                             if repeats == 0:
                                 break
@@ -852,7 +852,7 @@ class CallableDataSource (AbstractDataSource):
 
     Function to build batch iterator:
     >>> def make_batch_iterator(batch_size):
-    ...     for i in range(0, X.shape[0], batch_size):
+    ...     for i in range(0, len(X), batch_size):
     ...         yield [X[i:i + batch_size]]
 
     Data source acquiring batches from the `make_batch_iterator` function:
@@ -866,7 +866,7 @@ class CallableDataSource (AbstractDataSource):
 
     We can also provide a function that computes the number of samples:
     >>> def num_samples_fn():
-    ...     return X.shape[0]
+    ...     return len(X)
 
     >>> ds = CallableDataSource(make_batch_iterator, num_samples_fn)
     >>> int(ds.num_samples())
@@ -945,7 +945,7 @@ class IteratorDataSource (AbstractDataSource):
 
     Function to build batch iterator:
     >>> def make_batch_iterator(batch_size):
-    ...     for i in range(0, X.shape[0], batch_size):
+    ...     for i in range(0, len(X), batch_size):
     ...         yield (X[i:i + batch_size],)
 
     Build batch iterator:
@@ -1224,7 +1224,7 @@ class MapDataSource (AbstractDataSource):
 
     Define a function for augmenting each sample in X:
     >>> def augment(batch_X, batch_y):
-    ...     aug_shape = (batch_X.shape[0], 1)
+    ...     aug_shape = (len(batch_X), 1)
     ...     scale_X = np.exp(np.random.normal(size=aug_shape) * 0.1)
     ...     offset_X = np.random.normal(size=aug_shape) * 0.1
     ...     return (batch_X * scale_X + offset_X, batch_y)
@@ -1403,7 +1403,7 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
     Define a function to apply to samples:
     >>> def sqr_sum(x):
     ...     # Ensure that we receive batches of the expected size:
-    ...     assert x.shape[0] in {5, 2}
+    ...     assert len(x) in {5, 2}
     ...     return (x ** 2).sum(axis=1)
 
     Construct data to process and create a data source:
@@ -1426,7 +1426,7 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
     >>> for i in range(10):
     ...     partial_result = batch_map_concat(sqr_sum, iter_large, n_batches=2)
     ...     # Should have 10 samples per partial result
-    ...     assert partial_result[0].shape[0] == 10
+    ...     assert len(partial_result[0]) == 10
     ...     j = i * 10
     ...     assert np.allclose(partial_result[0],
     ...                        (X_large[j:j + 10]**2).sum(axis=1))
@@ -1605,7 +1605,7 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
     n_processed = 0
     for batch in batch_iter:
         # Get number of samples in batch; can vary
-        batch_n = batch[0].shape[0]
+        batch_n = _length_of_batch(batch)
 
         # Apply on batch and check the type of the results
         if prepend_args is not None:
