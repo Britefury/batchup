@@ -208,24 +208,26 @@ for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.Ran
 
 ### Using parallel processing to speed things up
 
-The above example has a potential performance problem as loading the images from disk would introduce latency. We can use the `work_pool` module to prepare the mini-batches in separate processes to hide this latency.
+The above example has a potential performance problem as loading the images from disk would introduce latency. We can use the `work_pool` module to prepare the mini-batches in separate threads or processes to hide this latency.
+
+#### Using threads
 
 The modifications to the previous example to use parallel processing are quite simple (lets assume that the `LoadImagesFromDisk` class is defined and that `train_X`, `train_y` and `ds` (an `ArrayDataSource` instance) have already been built:
 
 ```py3
 from batchup import work_pool
 
-# Build a pool of 4 worker processes:
-pool = work_pool.WorkerPool(processes=4)
+# Build a pool of 4 worker threads:
+th_pool = work_pool.WorkerThreadPool(processes=4)
 
 # Construct a data source that prepares mini-batches in the background
 # It wraps the existing data source `ds` and will try to keep a buffer of 32
 # mini-batches full to eliminate latency:
-par_ds = pool.parallel_data_source(ds, batch_buffer_size=32)
+par_ds = th_pool.parallel_data_source(ds, batch_buffer_size=32)
 
 # As soon as we create an iterator, it will start filling its buffer; lets create an
 # iterator right now to get it going in the background:
-par_iter = par_ds..batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345))
+par_iter = par_ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345))
 
 # Do some other initialisation stuff that may take a while...
 
@@ -235,6 +237,22 @@ for (batch_X, batch_y) in par_iter:
     # Process batches here...
 ```
 
+#### Using processes
+
+In some cases the data source that you wish to parallelize may include some cacheing logic that is not thread safe. In such cases you can use process based pools that use separate processes rather than threads.
+There are one or two gotchas, namely that using process-based pools entails a higher overhead and that the data source class and its dependent types must be declared in the top level of a module so that `pickle` can find them.
+
+```py3
+# Build a pool of 4 worker processes:
+proc_pool = work_pool.WorkerProcessPool(processes=4)
+
+# Construct a data source that prepares mini-batches in the background
+# It wraps the existing non-thread-safe data source `ds` and
+# will try to keep a buffer of 32 mini-batches full to eliminate latency:
+par_ds = proc_pool.parallel_data_source(ds, batch_buffer_size=32)
+
+# ... use `par_ds` the same way as before ...
+```
 
 ## Gathering results and loss values
 
