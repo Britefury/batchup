@@ -153,13 +153,13 @@ class AbstractDataSource (object):
 
         The function `func` should return the result for each sample in the
         mini-batch as an array. To return multiple results (e.g. loss and
-        errors) return a list of arrays (e.g. `[loss_array, error_array]`)
+        errors) return a tuple of arrays (e.g. `(loss_array, error_array)`)
 
         Parameters
         ----------
         func: callable `func(*batch) -> results`
             The function to call on each mini-batch. Note that the results
-            must be `None`, a list or a NumPy array
+            must be `None`, a tuple or a NumPy array
         batch_size: int
             The mini-batch size
         progress_iter_func: [optional] callable
@@ -176,10 +176,10 @@ class AbstractDataSource (object):
 
         Returns
         -------
-        list
+        tuple
             The per-sample sum of the results of the function `func` e.g.
-            `[batch_A, batch_B, ...]`
-            Returns an empty list if there were 0 samples in the data set.
+            `(batch_A, batch_B, ...)`
+            Returns an empty tuple if there were 0 samples in the data set.
 
         Examples
         --------
@@ -238,7 +238,7 @@ class AbstractDataSource (object):
         ----------
         func: callable `func(*batch) -> results`
             The function to call on each mini-batch. Note that the results
-            must be `None`, a list or a NumPy array
+            must be `None`, a tuple or a NumPy array
         batch_size: int
             The mini-batch size
         progress_iter_func: [optional] callable
@@ -264,7 +264,7 @@ class AbstractDataSource (object):
 
         Returns
         -------
-        list
+        tuple
             The sum of the results of the function `fn` divided by the number
             of samples processed, e.g.
             `[sum(outA_per_batch) / n_samples,
@@ -1361,7 +1361,7 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
 
     The function `func` should return the result for each sample in the
     mini-batch as an array. To return multiple results (e.g. loss and errors)
-    return a list of arrays (e.g. `[loss_array, error_array]`)
+    return a tuple of arrays (e.g. `(loss_array, error_array)`)
 
     `batch_iter` must be an iterator that generates mini-batches that
     contain samples
@@ -1370,7 +1370,7 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
     ----------
     func: callable `func(*batch) -> results`
         The function to call on each mini-batch. Note that the results
-        must be `None`, a list or a NumPy array
+        must be `None`, a tuple or a NumPy array
     batch_iter: data set iterator
         Iterator that generates mini-batches of data
     progress_iter_func: [optional] callable
@@ -1387,10 +1387,10 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
 
     Returns
     -------
-    list
+    tuple
         The per-sample sum of the results of the function `func` e.g.
-        `[batch_A, batch_B, ...]`
-        Returns an empty list if there were 0 samples in the data set.
+        `(batch_A, batch_B, ...)`
+        Returns an empty tuple if there were 0 samples in the data set.
 
     Examples
     --------
@@ -1450,12 +1450,12 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
         if batch_results is None:
             pass
         elif isinstance(batch_results, np.ndarray):
-            batch_results = [batch_results]
-        elif isinstance(batch_results, list):
+            batch_results = (batch_results,)
+        elif isinstance(batch_results, tuple):
             pass
         else:
             raise TypeError(
-                    'Batch function should return a list of results, a '
+                    'Batch function should return a tuple of results, a '
                     'single result as a NumPy array, or None, '
                     'not {}'.format(type(batch_results)))
 
@@ -1488,20 +1488,20 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
     - If `sum_axis` is `None`, `func` should return the
     across-samples SUM of the  results of operating on the mini-batch the
     sum of the values for the samples, e.g. for loss and error it should
-    return `[sum([loss0, loss1, ... lossN]), sum([err0, err1, ... errN])]`
+    return `(sum([loss0, loss1, ... lossN]), sum([err0, err1, ... errN]))`
     - Otherwise, `sum_axis` should specify the axis or axes over which
     the the batch results should be summed, e.g. if `func` returns a
     per-sample loss and error in two arrays
     `[[loss0, loss1, ... lossN], [err0, err1, ... errN]`, give `sum_axis`
     a value of `0` to sum over axis 0 to get the per-batch loss and error.
-    These esults will be accumulated and divided by the number of samples
+    These results will be accumulated and divided by the number of samples
     at the end to get the mean.
 
     Parameters
     ----------
     func: callable `func(*batch) -> results`
         The function to call on each mini-batch. Note that the results
-        must be `None`, a list or a NumPy array
+        must be `None`, a tuple or a NumPy array
     batch_iter: data set iterator
         Iterator that generates mini-batches of data
     progress_iter_func: [optional] callable
@@ -1527,12 +1527,12 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
 
     Returns
     -------
-    list
+    tuple
         The sum of the results of the function `fn` divided by the number of
         samples processed, e.g.
-        `[sum(outA_per_batch) / n_samples,
+        `(sum(outA_per_batch) / n_samples,
           sum(outB_per_batch) / n_samples,
-          ...]`
+          ...)`
 
     Examples
     --------
@@ -1615,12 +1615,12 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
         if batch_results is None:
             pass
         elif isinstance(batch_results, (np.ndarray, float)):
-            batch_results = [batch_results]
-        elif isinstance(batch_results, list):
+            batch_results = (batch_results,)
+        elif isinstance(batch_results, tuple):
             pass
         else:
             raise TypeError(
-                    'Batch function should return a list of results, a '
+                    'Batch function should return a tuple of results, a '
                     'single result as a NumPy array or float, or None, '
                     'not {}'.format(type(batch_results)))
 
@@ -1629,8 +1629,10 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
             # Initialise the accumulator to the batch results if `func`
             # returns summed results or if it returned None;
             # don't attempt to iterate over None and sum each item
-            if sum_axis is None or batch_results is None:
-                results_accum = batch_results
+            if batch_results is None:
+                pass
+            elif sum_axis is None:
+                results_accum = list(batch_results)
             else:
                 results_accum = [br.sum(axis=sum_axis) for br in batch_results]
         else:
