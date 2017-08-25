@@ -1743,7 +1743,7 @@ def test_MapDataSource():
         next(m_call_ds.samples_by_indices_nomapping(np.arange(10)))
 
 
-def test_batch_map():
+def test_batch_map_concat():
     from batchup import data_source
 
     def sqr_sum(x):
@@ -1774,7 +1774,7 @@ def test_batch_map():
     # Multiple return values
     #
     def batch_func(batch_X, batch_Y):
-        return [batch_X + 2, (batch_Y**2).sum(axis=1)]
+        return (batch_X + 2, (batch_Y**2).sum(axis=1))
 
     # Dummy progress function to check parameter values
     def progress_iter_func(iterator, total, leave):
@@ -1789,29 +1789,29 @@ def test_batch_map():
     Y = np.arange(90).reshape((45, 2))
     ads = data_source.ArrayDataSource([X, Y])
 
-    [x, y] = data_source.batch_map_concat(batch_func, ads.batch_iterator(5),
-                                          progress_iter_func, n_batches=9)
+    x, y = data_source.batch_map_concat(batch_func, ads.batch_iterator(5),
+                                        progress_iter_func, n_batches=9)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
-    [x, y] = data_source.batch_map_concat(batch_func, ads.batch_iterator(5),
-                                          progress_iter_func, n_batches=9)
+    x, y = data_source.batch_map_concat(batch_func, ads.batch_iterator(5),
+                                        progress_iter_func, n_batches=9)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
     # Test prepend_args
     ads_y = data_source.ArrayDataSource([Y])
-    [x, y] = data_source.batch_map_concat(batch_func, ads_y.batch_iterator(5),
-                                          progress_iter_func, n_batches=9,
-                                          prepend_args=(np.array([5]),))
+    x, y = data_source.batch_map_concat(batch_func, ads_y.batch_iterator(5),
+                                        progress_iter_func, n_batches=9,
+                                        prepend_args=(np.array([5]),))
 
     assert (x == 5 + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
 
-def test_mean_batch_map():
+def test_batch_map_mean():
     from batchup import data_source
 
     # Define a function to compute the per-sample binary cross entropy
@@ -1870,14 +1870,14 @@ def test_mean_batch_map():
                 pred_large[j:j + 10], tgt_large[j:j + 10]).mean())
 
 
-def test_data_source_method_batch_map():
+def test_data_source_method_batch_map_concat():
     from batchup import data_source
 
     #
     # Multiple return values
     #
     def batch_func(batch_X, batch_Y):
-        return [batch_X + 2, (batch_Y**2).sum(axis=1)]
+        return (batch_X + 2, (batch_Y**2).sum(axis=1))
 
     # Dummy progress function to check parameter values
     def progress_iter_func(iterator, total, leave):
@@ -1892,21 +1892,21 @@ def test_data_source_method_batch_map():
     Y = np.arange(90).reshape((45, 2))
     ads = data_source.ArrayDataSource([X, Y])
 
-    [x, y] = ads.batch_map_concat(batch_func, 5, progress_iter_func,
-                                  n_batches=9)
+    x, y = ads.batch_map_concat(batch_func, 5, progress_iter_func,
+                                n_batches=9)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
-    [x, y] = ads.batch_map_concat(batch_func, 5, progress_iter_func)
+    x, y = ads.batch_map_concat(batch_func, 5, progress_iter_func)
 
     assert (x == X + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
 
     # Test prepend_args
     ads_y = data_source.ArrayDataSource([Y])
-    [x, y] = ads_y.batch_map_concat(batch_func, 5, progress_iter_func,
-                                    prepend_args=(np.array([5]),))
+    x, y = ads_y.batch_map_concat(batch_func, 5, progress_iter_func,
+                                  prepend_args=(np.array([5]),))
 
     assert (x == 5 + 2).all()
     assert (y == (Y**2).sum(axis=1)).all()
@@ -1922,7 +1922,7 @@ def test_data_source_method_batch_map():
     def batch_func_one_ret(batch_X, batch_Y):
         return (batch_Y**2).sum(axis=1)
 
-    [y] = ads.batch_map_concat(batch_func_one_ret, 5, progress_iter_func)
+    (y,) = ads.batch_map_concat(batch_func_one_ret, 5, progress_iter_func)
 
     assert (y == (Y**2).sum(axis=1)).all()
 
@@ -1944,13 +1944,13 @@ def test_data_source_method_batch_map():
     # Check that using `repeats=-1` while specifying the number of
     # batches is OK. Don't use progress_iter_func as it expects 9 batches,
     # not 15.
-    [x, y] = ads_inf.batch_map_concat(batch_func, 5, n_batches=15)
+    x, y = ads_inf.batch_map_concat(batch_func, 5, n_batches=15)
 
     assert (x == np.append(X, X[:30], axis=0) + 2).all()
     assert (y == (np.append(Y, Y[:30], axis=0)**2).sum(axis=1)).all()
 
 
-def test_data_source_method_mean_batch_map_in_order():
+def test_data_source_method_batch_map_mean_in_order():
     from batchup import data_source
 
     # Data to extract batches from
@@ -1963,7 +1963,7 @@ def test_data_source_method_mean_batch_map_in_order():
     # Multiple return values
     #
     def batch_func(batch_X, batch_Y):
-        return [batch_X.sum(), (batch_Y**2).sum(axis=1).sum()]
+        return (batch_X.sum(), (batch_Y**2).sum(axis=1).sum())
 
     # Dummy progress function to check parameter values
     def progress_iter_func(iterator, total, leave):
@@ -1973,7 +1973,7 @@ def test_data_source_method_mean_batch_map_in_order():
         assert not leave
         return iterator
 
-    [x, y] = data_source.batch_map_mean(
+    x, y = data_source.batch_map_mean(
         batch_func, ads.batch_iterator(5),
         progress_iter_func=progress_iter_func, sum_axis=None,
         n_batches=10)
@@ -1981,7 +1981,7 @@ def test_data_source_method_mean_batch_map_in_order():
     assert np.allclose(x, X.mean())
     assert np.allclose(y, (Y**2).sum(axis=1).mean())
 
-    [x, y] = ads.batch_map_mean(
+    x, y = ads.batch_map_mean(
         batch_func, 5, progress_iter_func=progress_iter_func, sum_axis=None)
 
     assert np.allclose(x, X.mean())
@@ -2001,7 +2001,7 @@ def test_data_source_method_mean_batch_map_in_order():
         assert not leave
         return iterator
 
-    [x] = ads.batch_map_mean(
+    x, = ads.batch_map_mean(
         batch_func_single, 5, progress_iter_func=progress_iter_func,
         sum_axis=None)
 
@@ -2034,9 +2034,9 @@ def test_data_source_method_mean_batch_map_in_order():
     def batch_func_prepend(a, b, batch_X, batch_Y):
         assert a == 42
         assert b == 3.14
-        return [batch_X.sum(), (batch_Y**2).sum(axis=1).sum()]
+        return (batch_X.sum(), (batch_Y**2).sum(axis=1).sum())
 
-    [x, y] = ads.batch_map_mean(
+    x, y = ads.batch_map_mean(
         batch_func_prepend, 5, progress_iter_func=progress_iter_func,
         sum_axis=None, prepend_args=(42, 3.14))
 
@@ -2053,7 +2053,7 @@ def test_data_source_method_mean_batch_map_in_order():
     # Check that using `repeats=-1` while specifying the number of
     # batches is OK. Don't use progress_iter_func as it expects 9 batches,
     # not 15.
-    [x, y] = ads_inf.batch_map_mean(batch_func, 5, n_batches=15)
+    x, y = ads_inf.batch_map_mean(batch_func, 5, n_batches=15)
 
     assert np.allclose(x, np.append(X, X[:28], axis=0).mean())
     assert np.allclose(
@@ -2076,7 +2076,7 @@ def test_data_source_method_mean_batch_map_in_order():
     assert np.allclose(loss, binary_crossentropy(pred[:5], tgt[:5]) / 5.0)
 
 
-def test_data_source_method_mean_batch_map_in_order_per_sample_func():
+def test_data_source_method_batch_map_mean_in_order_per_sample_func():
     # Test `mean_batch_map` where the batch function returns per-sample
     # results
     from batchup import data_source
@@ -2091,7 +2091,7 @@ def test_data_source_method_mean_batch_map_in_order_per_sample_func():
     # Multiple return values
     #
     def batch_func(batch_X, batch_Y):
-        return [batch_X + 2, (batch_Y**2).sum(axis=1)]
+        return (batch_X + 2, (batch_Y**2).sum(axis=1))
 
     # Dummy progress function to check parameter values
     def progress_iter_func(iterator, total, leave):
@@ -2101,9 +2101,9 @@ def test_data_source_method_mean_batch_map_in_order_per_sample_func():
         assert not leave
         return iterator
 
-    [x, y] = ads.batch_map_mean(batch_func, 5,
-                                progress_iter_func=progress_iter_func,
-                                sum_axis=0)
+    x, y = ads.batch_map_mean(batch_func, 5,
+                              progress_iter_func=progress_iter_func,
+                              sum_axis=0)
 
     assert np.allclose(x, X.mean() + 2.0)
     assert np.allclose(y, (Y**2).sum(axis=1).mean())
@@ -2114,7 +2114,7 @@ def test_data_source_method_mean_batch_map_in_order_per_sample_func():
     def batch_func_single(batch_X, batch_Y):
         return batch_X + 2
 
-    [x] = ads.batch_map_mean(batch_func_single, 5, sum_axis=0)
+    (x,) = ads.batch_map_mean(batch_func_single, 5, sum_axis=0)
 
     assert np.allclose(x, X.mean() + 2.0)
     assert np.allclose(y, (Y**2).sum(axis=1).mean())
