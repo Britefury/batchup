@@ -4,14 +4,14 @@ import tarfile
 import pickle
 import numpy as np
 
-from . import dataset
+from .. import config
 
 PICKLE_ENC = {} if sys.version_info[0] == 2 else {'encoding': 'latin1'}
 
 
 def _download_cifar10(filename='cifar-10-python.tar.gz',
                       source='http://www.cs.toronto.edu/~kriz/'):
-    return dataset.download_data(filename, source + filename)
+    return config.download_data(filename, source + filename)
 
 
 def _convert_batch(b):

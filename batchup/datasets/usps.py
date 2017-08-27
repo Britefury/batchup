@@ -1,14 +1,15 @@
 import numpy as np
 import tables
 
-from . import dataset
+from .. import config
 
 
 _USPS_SOURCE = 'https://github.com/Britefury/usps_dataset/raw/master/usps.h5'
+_USPS_HASH = None
 
 
 def _download_usps(source=_USPS_SOURCE):
-    return dataset.download_data('usps.h5', source)
+    return config.download_data('usps.h5', source, _USPS_HASH)
 
 
 def _load_usps():

@@ -3,7 +3,7 @@
 import numpy as np
 import gzip
 
-from . import dataset
+from .. import config
 
 
 def _download_mnist(filename, source='http://yann.lecun.com/exdb/mnist/'):

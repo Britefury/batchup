@@ -2,7 +2,7 @@ import os
 import tarfile
 import numpy as np
 
-from . import dataset
+from .. import config
 
 
 def _download_stl(filename='stl10_binary.tar.gz',
