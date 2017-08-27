@@ -60,7 +60,7 @@ def test_val_1fold():
                               b'truck']
 
 
-@pytest.mark.slow
+@pytest.mark.bigdataset
 def test_train_test_split():
     from batchup.datasets import stl
     from batchup.tests.dataset_test_helpers import sample_hashes
