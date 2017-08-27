@@ -61,6 +61,7 @@ def get_data_dir():
     """
     return os.path.join(get_batchup_path(), _DATA_DIR_NAME)
 
+
 def get_data_path(filename):
     """
     Get the path of the given file within the batchup data directory
@@ -190,7 +191,8 @@ def download_and_verify(path, source_url, sha256):
         # Already exists?
         # Nothing to do, except print the SHA-256 if necessary
         if sha256 is None:
-            print('The SHA-256 of {} is "{}"'.format(path, compute_sha256(path)))
+            print('The SHA-256 of {} is "{}"'.format(
+                path, compute_sha256(path)))
         return path
 
     # Compute the path of the unverified file

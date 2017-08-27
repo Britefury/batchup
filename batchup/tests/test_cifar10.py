@@ -56,3 +56,15 @@ def test_val_10k():
     assert ds.class_names == ['airplane', 'automobile', 'bird', 'cat',
                               'deer', 'dog', 'frog', 'horse', 'ship',
                               'truck']
+
+
+def test_train_test_split():
+    from batchup.datasets import cifar10
+    from batchup.tests.dataset_test_helpers import sample_hashes
+
+    ds = cifar10.CIFAR10(n_val=0)
+
+    train_h = sample_hashes(ds.train_X_u8)
+    test_h = sample_hashes(ds.test_X_u8)
+
+    assert set(train_h).intersection(set(test_h)) == set()

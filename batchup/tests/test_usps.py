@@ -48,3 +48,15 @@ def test_val_729():
 
     assert ds.test_y.shape == (2007,)
     assert ds.test_y.dtype == np.int32
+
+
+def test_train_test_split():
+    from batchup.datasets import usps
+    from batchup.tests.dataset_test_helpers import sample_hashes
+
+    ds = usps.USPS(n_val=0)
+
+    train_h = sample_hashes(ds.train_X)
+    test_h = sample_hashes(ds.test_X)
+
+    assert set(train_h).intersection(set(test_h)) == set()
