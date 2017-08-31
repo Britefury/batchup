@@ -106,7 +106,14 @@ def download(path, source_url):
             sys.stdout.write('\rDownloading {} {:.2%}'.format(
                 filename, float(count * block_size) / float(total_size)))
             sys.stdout.flush()
-        urlretrieve(source_url, path, reporthook=_progress)
+        try:
+            urlretrieve(source_url, path, reporthook=_progress)
+        except:
+            sys.stdout.write('\r')
+            # Exception; remove any partially downloaded file and re-raise
+            if os.path.exists(path):
+                os.remove(path)
+            raise
         sys.stdout.write('\r')
     return path
 

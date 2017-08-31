@@ -8,13 +8,13 @@ _H5_FILENAME = 'fashion-mnist.h5'
 
 
 _SHA256_TRAIN_IMAGES = \
-    None
+    '3aede38d61863908ad78613f6a32ed271626dd12800ba2636569512369268a84'
 _SHA256_TRAIN_LABELS = \
-    None
+    'a04f17134ac03560a47e3764e11b92fc97de4d1bfaf8ba1a3aa29af54cc90845'
 _SHA256_TEST_IMAGES = \
-    None
+    '346e55b948d973a97e58d2351dde16a484bd415d4595297633bb08f03db6a073'
 _SHA256_TEST_LABELS = \
-    None
+    '67da17c76eaffca5446c3361aaab5c3cd6d1c2608764d35dfb1850b086bf8dd5'
 
 
 def delete_cache():  # pragma: no cover
