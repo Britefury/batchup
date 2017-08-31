@@ -19,7 +19,7 @@ _SHA256_TEST_IMAGES = \
     '8d422c7b0a1c1c79245a5bcf07fe86e33eeafee792b84584aec276f5a2dbc4e6'
 _SHA256_TEST_LABELS = \
     'f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6'
-_H5_FILENAME_DIGITS = 'mnist.h5'
+_H5_FILENAME = 'mnist.h5'
 
 
 def _download_mnist(filename, sha256, source):
@@ -85,6 +85,12 @@ def _load_mnist(base_url, h5_filename, dataset_name, train_X_sha256,
     return h5_path
 
 
+def delete_cache():  # pragma: no cover
+    h5_path = config.get_data_path(_H5_FILENAME)
+    if os.path.exists(h5_path):
+        os.remove(h5_path)
+
+
 class MNISTBase (object):
     def __init__(self, h5_path, n_val=10000, val_lower=0.0, val_upper=1.0):
         f = tables.open_file(h5_path, mode='r')
@@ -115,7 +121,7 @@ class MNISTBase (object):
 class MNIST (MNISTBase):
     def __init__(self, n_val=10000, val_lower=0.0, val_upper=1.0):
         h5_path = _load_mnist(
-            _MNIST_DIGITS_BASE_URL, _H5_FILENAME_DIGITS, 'MNIST',
+            _MNIST_DIGITS_BASE_URL, _H5_FILENAME, 'MNIST',
             _SHA256_TRAIN_IMAGES, _SHA256_TRAIN_LABELS,
             _SHA256_TEST_IMAGES, _SHA256_TEST_LABELS
         )

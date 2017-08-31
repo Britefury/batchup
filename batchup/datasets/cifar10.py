@@ -80,6 +80,12 @@ def _load_cifar10():
     return h5_path
 
 
+def delete_cache():  # pragma: no cover
+    h5_path = config.get_data_path(_H5_FILENAME)
+    if os.path.exists(h5_path):
+        os.remove(h5_path)
+
+
 class CIFAR10 (object):
     def __init__(self, n_val=10000, val_lower=0.0, val_upper=1.0):
         h5_path = _load_cifar10()

@@ -50,7 +50,6 @@ def test_val_10k():
     assert ds.test_y.dtype == np.int32
 
 
-@pytest.mark.slow
 def test_train_test_split():
     from batchup.datasets import mnist
     from batchup.tests.dataset_test_helpers import sample_hashes
