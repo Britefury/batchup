@@ -58,7 +58,6 @@ def test_val_10k():
                               'truck']
 
 
-@pytest.mark.slow
 def test_train_test_split():
     from batchup.datasets import cifar10
     from batchup.tests.dataset_test_helpers import sample_hashes
