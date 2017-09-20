@@ -507,7 +507,7 @@ class RandomAccessDataSource (AbstractDataSource):
                         yield self.indices[i:i + batch_size]
                 else:
                     for i in range(0, self.length, batch_size):
-                        yield slice(i, i + batch_size)
+                        yield np.arange(i, i + batch_size)
         else:
             repeats = self.repeats
             if shuffle is not None:
@@ -587,7 +587,7 @@ class RandomAccessDataSource (AbstractDataSource):
                         j = i + batch_size
                         if j <= self.length:
                             # Within size of data
-                            yield slice(i, j)
+                            yield np.arange(i, j)
                             i = j
                         elif j <= self.length * 2:
                             # One restart is required
@@ -597,7 +597,7 @@ class RandomAccessDataSource (AbstractDataSource):
                             if repeats == 0:
                                 # Finished; emit remaining elements
                                 if i < self.length:
-                                    yield slice(i, self.length)
+                                    yield np.arange(i, self.length)
                                 break
 
                             # Wrap over
