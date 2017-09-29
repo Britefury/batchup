@@ -507,7 +507,7 @@ class RandomAccessDataSource (AbstractDataSource):
                         yield self.indices[i:i + batch_size]
                 else:
                     for i in range(0, self.length, batch_size):
-                        yield np.arange(i, i + batch_size)
+                        yield np.arange(i, min(i + batch_size, self.length))
         else:
             repeats = self.repeats
             if shuffle is not None:
