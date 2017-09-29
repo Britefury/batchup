@@ -172,8 +172,8 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    return target_path
     >>>
     >>> # Now use it:
-    >>> usps_path = usps_data_online()
-    >>> # ...
+    >>> usps_path = usps_data_online() # doctest:+ELLIPSIS
+    ...
 
     In this example, the USPS dataset will be acquired from a file on the
     filesystem. Note that the source path is fixed; the next example
@@ -196,8 +196,8 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    return target_path
     >>>
     >>> # Now use it:
-    >>> usps_path = usps_data_offline_fixed()
-    >>> # ...
+    >>> usps_path = usps_data_offline_fixed() # doctest:+ELLIPSIS
+    ...
 
     The source path is provided as an argument to the decorated fetch
     function:
@@ -220,8 +220,9 @@ def fetch_and_convert_dataset(source_files, target_filename):
     >>>
     >>> # Now use it (note that the KW-arg `usps_path` is the same
     >>> # as the `arg_name` parameter given to `CopySourceFile` above:
-    >>> usps_path = usps_data_offline_dynamic(usps_path='look/here.h5')
-    >>> # ...
+    >>> usps_path = usps_data_offline_dynamic(
+    ...    usps_path='look/here.h5') # doctest:+ELLIPSIS
+    ...
     """
     def decorate_fetcher(convert_function):
         def fetch(**kwargs):
