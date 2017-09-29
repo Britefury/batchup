@@ -153,16 +153,16 @@ def fetch_and_convert_dataset(source_files, target_filename):
     conversion function simply moves it to the target path:
 
     >>> import shutil
-    ...
-    ... _USPS_SRC_ONLINE = DownloadSourceFile(
+    >>>
+    >>> _USPS_SRC_ONLINE = DownloadSourceFile(
     ...    filename='usps.h5',
     ...    url='https://github.com/Britefury/usps_dataset/raw/master/'
     ...        'usps.h5',
     ...    sha256='ba768d9a9b11e79b31c1e40130647c4fc04e6afc1fb41a0d4b9f11'
     ...           '76065482b4'
     ... )
-    ...
-    ... @fetch_and_convert_dataset([_USPS_SRC_ONLINE], 'usps.h5')
+    >>>
+    >>> @fetch_and_convert_dataset([_USPS_SRC_ONLINE], 'usps.h5')
     ... def usps_data_online(source_paths, target_path):
     ...    usps_path = source_paths[0]
     ...    # For other datasets, you would convert the data here
@@ -170,10 +170,10 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    shutil.move(usps_path, target_path)
     ...    # Return the target path indicating success
     ...    return target_path
-    ...
-    ... # Now use it:
-    ... usps_path = usps_data_online()
-    ... # ...
+    >>>
+    >>> # Now use it:
+    >>> usps_path = usps_data_online()
+    >>> # ...
 
     In this example, the USPS dataset will be acquired from a file on the
     filesystem. Note that the source path is fixed; the next example
@@ -185,8 +185,8 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    sha256='ba768d9a9b11e79b31c1e40130647c4fc04e6afc1fb41a0d4b9f11'
     ...           '76065482b4'
     ... )
-    ...
-    ... @fetch_and_convert_dataset([_USPS_SRC_OFFLINE_FIXED], 'usps.h5')
+    >>>
+    >>> @fetch_and_convert_dataset([_USPS_SRC_OFFLINE_FIXED], 'usps.h5')
     ... def usps_data_offline_fixed(source_paths, target_path):
     ...    usps_path = source_paths[0]
     ...    # For other datasets, you would convert the data here
@@ -194,10 +194,10 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    shutil.move(usps_path, target_path)
     ...    # Return the target path indicating success
     ...    return target_path
-    ...
-    ... # Now use it:
-    ... usps_path = usps_data_offline_fixed()
-    ... # ...
+    >>>
+    >>> # Now use it:
+    >>> usps_path = usps_data_offline_fixed()
+    >>> # ...
 
     The source path is provided as an argument to the decorated fetch
     function:
@@ -208,8 +208,8 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    sha256='ba768d9a9b11e79b31c1e40130647c4fc04e6afc1fb41a0d4b9f11'
     ...           '76065482b4'
     ... )
-    ...
-    ... @fetch_and_convert_dataset([_USPS_SRC_OFFLINE_DYNAMIC], 'usps.h5')
+    >>>
+    >>> @fetch_and_convert_dataset([_USPS_SRC_OFFLINE_DYNAMIC], 'usps.h5')
     ... def usps_data_offline_dynamic(source_paths, target_path):
     ...    usps_path = source_paths[0]
     ...    # For other datasets, you would convert the data here
@@ -217,11 +217,11 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ...    shutil.move(usps_path, target_path)
     ...    # Return the target path indicating success
     ...    return target_path
-    ...
-    ... # Now use it (note that the KW-arg `usps_path` is the same
-    ... # as the `arg_name` parameter given to `CopySourceFile` above:
-    ... usps_path = usps_data_offline_dynamic(usps_path='look/here.h5')
-    ... # ...
+    >>>
+    >>> # Now use it (note that the KW-arg `usps_path` is the same
+    >>> # as the `arg_name` parameter given to `CopySourceFile` above:
+    >>> usps_path = usps_data_offline_dynamic(usps_path='look/here.h5')
+    >>> # ...
     """
     def decorate_fetcher(convert_function):
         def fetch(**kwargs):
@@ -234,8 +234,9 @@ def fetch_and_convert_dataset(source_files, target_filename):
                 source_paths = []
                 for src in source_files:
                     if not isinstance(src, AbstractSourceFile):
-                        raise TypeError('source_files should contain `SourceFile` '
-                                        'instances, not {}'.format(type(src)))
+                        raise TypeError('source_files should contain'
+                                        '`SourceFile` instances, '
+                                        'not {}'.format(type(src)))
                     p = src.acquire(**kwargs)
                     if p is not None:
                         source_paths.append(p)
