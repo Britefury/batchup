@@ -1,6 +1,6 @@
 import os
 from .. import config
-from . import mnist
+from . import mnist, dataset
 
 _FASHION_MNIST_BASE_URL = \
     'http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/'
@@ -16,11 +16,29 @@ _SHA256_TEST_IMAGES = \
 _SHA256_TEST_LABELS = \
     '67da17c76eaffca5446c3361aaab5c3cd6d1c2608764d35dfb1850b086bf8dd5'
 
+_TRAIN_X_SRC = dataset.DownloadSourceFile(
+    'train-images-idx3-ubyte.gz', base_url=_FASHION_MNIST_BASE_URL,
+    sha256=_SHA256_TRAIN_IMAGES)
+_TRAIN_Y_SRC = dataset.DownloadSourceFile(
+    'train-labels-idx1-ubyte.gz', base_url=_FASHION_MNIST_BASE_URL,
+    sha256=_SHA256_TRAIN_LABELS)
+_TEST_X_SRC = dataset.DownloadSourceFile(
+    't10k-images-idx3-ubyte.gz', base_url=_FASHION_MNIST_BASE_URL,
+    sha256=_SHA256_TEST_IMAGES)
+_TEST_Y_SRC = dataset.DownloadSourceFile(
+    't10k-labels-idx1-ubyte.gz', base_url=_FASHION_MNIST_BASE_URL,
+    sha256=_SHA256_TEST_LABELS)
+
+_SOURCES = [_TRAIN_X_SRC, _TRAIN_Y_SRC, _TEST_X_SRC, _TEST_Y_SRC]
+
+
+@dataset.fetch_and_convert_dataset(_SOURCES, _H5_FILENAME)
+def fetch_fashion_mnist(source_paths, target_path):
+    return mnist._convert_mnist('Fashion MNIST', target_path, *source_paths)
+
 
 def delete_cache():  # pragma: no cover
-    h5_path = config.get_data_path(_H5_FILENAME)
-    if os.path.exists(h5_path):
-        os.remove(h5_path)
+    dataset.delete_dataset_cache(_H5_FILENAME)
 
 
 class FashionMNIST (mnist.MNISTBase):
@@ -43,11 +61,7 @@ class FashionMNIST (mnist.MNISTBase):
     }
     """
     def __init__(self, n_val=10000, val_lower=0.0, val_upper=1.0):
-        h5_path = mnist._load_mnist(
-            _FASHION_MNIST_BASE_URL, _H5_FILENAME, 'Fashion MNIST',
-            _SHA256_TRAIN_IMAGES, _SHA256_TRAIN_LABELS,
-            _SHA256_TEST_IMAGES, _SHA256_TEST_LABELS
-        )
+        h5_path = fetch_fashion_mnist()
         if h5_path is not None:
             super(FashionMNIST, self).__init__(h5_path, n_val, val_lower,
                                                val_upper)

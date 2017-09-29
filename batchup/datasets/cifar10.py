@@ -8,87 +8,80 @@ import tables
 
 from .. import config
 from ..image.utils import ImageArrayUInt8ToFloat32
+from . import dataset
 
 
 # Pickle encoding parameters depend on Python version
 _PICKLE_ENC = {} if sys.version_info[0] == 2 else {'encoding': 'latin1'}
 
+_CIFAR10_BASE_URL = 'http://www.cs.toronto.edu/~kriz/'
 _SHA256_CIFAR10_TARBALL = \
     '6d958be074577803d12ecdefd02955f39262c83c16fe9348329d7fe0b5c001ce'
 _H5_FILENAME = 'cifar10.h5'
 
 
-def _download_cifar10(filename, sha256,
-                      source='http://www.cs.toronto.edu/~kriz/'):
-    temp_filename = os.path.join('temp', filename)
-    return config.download_data(temp_filename, source + filename, sha256)
+_CIFAR10_SRC = dataset.DownloadSourceFile(
+    'cifar-10-python.tar.gz', base_url=_CIFAR10_BASE_URL,
+    sha256=_SHA256_CIFAR10_TARBALL)
 
 
-def _load_cifar10():
-    h5_path = config.get_data_path(_H5_FILENAME)
-    if not os.path.exists(h5_path):
-        # Download MNIST binary files
-        tarball_path = _download_cifar10('cifar-10-python.tar.gz',
-                                         _SHA256_CIFAR10_TARBALL)
+@dataset.fetch_and_convert_dataset([_CIFAR10_SRC], _H5_FILENAME)
+def fetch_cifar10(source_paths, target_path):
+    tarball_path = source_paths[0]
 
-        if tarball_path is not None:
-            # Get the paths to the member files
-            download_dir = os.path.dirname(tarball_path)
-            data_paths = [os.path.join(download_dir,
-                                       'cifar-10-batches-py',
-                                       'data_batch_{}'.format(i))
-                          for i in range(1, 6)]
-            test_path = os.path.join(download_dir,
-                                     'cifar-10-batches-py', 'test_batch')
+    # Get the paths to the member files
+    download_dir = os.path.dirname(tarball_path)
+    data_paths = [os.path.join(download_dir,
+                               'cifar-10-batches-py',
+                               'data_batch_{}'.format(i))
+                  for i in range(1, 6)]
+    test_path = os.path.join(download_dir,
+                             'cifar-10-batches-py', 'test_batch')
 
-            # Unpack
-            print('Unpacking CIFAR-10 tarball {}'.format(tarball_path))
-            tarfile.open(name=tarball_path, mode='r:gz').extractall(
-                path=download_dir)
+    # Unpack
+    print('Unpacking CIFAR-10 tarball {}'.format(tarball_path))
+    tarfile.open(name=tarball_path, mode='r:gz').extractall(
+        path=download_dir)
 
-            # Create HDF5 output file
-            f_out = tables.open_file(h5_path, mode='w')
-            g_out = f_out.create_group(f_out.root, 'cifar10', 'MNIST data')
+    # Create HDF5 output file
+    f_out = tables.open_file(target_path, mode='w')
+    g_out = f_out.create_group(f_out.root, 'cifar10', 'MNIST data')
 
-            print('Converting CIFAR-10 training set to HDF5')
-            train_X_u8 = []
-            train_y = []
-            for batch_path in data_paths:
-                print('Converting {} to HDF5'.format(batch_path))
-                batch = pickle.load(open(batch_path, 'rb'), **_PICKLE_ENC)
-                train_X_u8.append(batch['data'].reshape((-1, 3, 32, 32)))
-                train_y.append(np.array(batch['labels'], dtype=np.int32))
-            train_X_u8 = np.concatenate(train_X_u8, axis=0)
-            train_y = np.concatenate(train_y, axis=0)
-            f_out.create_array(g_out, 'train_X_u8', train_X_u8)
-            f_out.create_array(g_out, 'train_y', train_y)
+    print('Converting CIFAR-10 training set to HDF5')
+    train_X_u8 = []
+    train_y = []
+    for batch_path in data_paths:
+        print('Converting {} to HDF5'.format(batch_path))
+        batch = pickle.load(open(batch_path, 'rb'), **_PICKLE_ENC)
+        train_X_u8.append(batch['data'].reshape((-1, 3, 32, 32)))
+        train_y.append(np.array(batch['labels'], dtype=np.int32))
+    train_X_u8 = np.concatenate(train_X_u8, axis=0)
+    train_y = np.concatenate(train_y, axis=0)
+    f_out.create_array(g_out, 'train_X_u8', train_X_u8)
+    f_out.create_array(g_out, 'train_y', train_y)
 
-            print('Converting CIFAR-10 test set to HDF5')
-            tst_batch = pickle.load(open(test_path, 'rb'), **_PICKLE_ENC)
-            test_X_u8 = tst_batch['data'].reshape((-1, 3, 32, 32))
-            test_y = np.array(tst_batch['labels'], dtype=np.int32)
-            f_out.create_array(g_out, 'test_X_u8', test_X_u8)
-            f_out.create_array(g_out, 'test_y', test_y)
+    print('Converting CIFAR-10 test set to HDF5')
+    tst_batch = pickle.load(open(test_path, 'rb'), **_PICKLE_ENC)
+    test_X_u8 = tst_batch['data'].reshape((-1, 3, 32, 32))
+    test_y = np.array(tst_batch['labels'], dtype=np.int32)
+    f_out.create_array(g_out, 'test_X_u8', test_X_u8)
+    f_out.create_array(g_out, 'test_y', test_y)
 
-            f_out.close()
+    f_out.close()
 
-            shutil.rmtree(os.path.join(download_dir, 'cifar-10-batches-py'))
-            os.remove(tarball_path)
-        else:
-            return None
+    # Remove the contents unpacked from the tarball
+    shutil.rmtree(os.path.join(download_dir, 'cifar-10-batches-py'))
 
-    return h5_path
+    return target_path
 
 
 def delete_cache():  # pragma: no cover
-    h5_path = config.get_data_path(_H5_FILENAME)
-    if os.path.exists(h5_path):
-        os.remove(h5_path)
+    dataset.delete_dataset_cache(_H5_FILENAME)
 
 
 class CIFAR10 (object):
     def __init__(self, n_val=10000, val_lower=0.0, val_upper=1.0):
-        h5_path = _load_cifar10()
+        h5_path = fetch_cifar10()
         if h5_path is not None:
             f = tables.open_file(h5_path, mode='r')
 
@@ -107,7 +100,7 @@ class CIFAR10 (object):
                 self.val_X_u8 = train_X_u8[-n_val:]
                 self.train_y, self.val_y = train_y[:-n_val], train_y[-n_val:]
         else:
-            raise RuntimeError('Could not load MNIST dataset')
+            raise RuntimeError('Could not load CIFAR-10 dataset')
 
         self.train_X = ImageArrayUInt8ToFloat32(self.train_X_u8, val_lower,
                                                 val_upper)

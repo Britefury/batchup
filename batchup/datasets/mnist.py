@@ -1,12 +1,11 @@
 # Code adapted from:
 # https://raw.githubusercontent.com/Lasagne/Lasagne/master/examples/mnist.py
-import os
 import numpy as np
 import gzip
 import tables
 
-from .. import config
 from ..image.utils import ImageArrayUInt8ToFloat32
+from . import dataset
 
 
 _MNIST_DIGITS_BASE_URL = 'http://yann.lecun.com/exdb/mnist/'
@@ -21,10 +20,20 @@ _SHA256_TEST_LABELS = \
     'f7ae60f92e00ec6debd23a6088c31dbd2371eca3ffa0defaefb259924204aec6'
 _H5_FILENAME = 'mnist.h5'
 
+_TRAIN_X_SRC = dataset.DownloadSourceFile(
+    'train-images-idx3-ubyte.gz', base_url=_MNIST_DIGITS_BASE_URL,
+    sha256=_SHA256_TRAIN_IMAGES)
+_TRAIN_Y_SRC = dataset.DownloadSourceFile(
+    'train-labels-idx1-ubyte.gz', base_url=_MNIST_DIGITS_BASE_URL,
+    sha256=_SHA256_TRAIN_LABELS)
+_TEST_X_SRC = dataset.DownloadSourceFile(
+    't10k-images-idx3-ubyte.gz', base_url=_MNIST_DIGITS_BASE_URL,
+    sha256=_SHA256_TEST_IMAGES)
+_TEST_Y_SRC = dataset.DownloadSourceFile(
+    't10k-labels-idx1-ubyte.gz', base_url=_MNIST_DIGITS_BASE_URL,
+    sha256=_SHA256_TEST_LABELS)
 
-def _download_mnist(filename, sha256, source):
-    temp_filename = os.path.join('temp', filename)
-    return config.download_data(temp_filename, source + filename, sha256)
+_SOURCES = [_TRAIN_X_SRC, _TRAIN_Y_SRC, _TEST_X_SRC, _TEST_Y_SRC]
 
 
 def _read_mnist_images(path):
@@ -44,51 +53,35 @@ def _read_mnist_labels(path):
     return data.astype(np.int32)
 
 
-def _load_mnist(base_url, h5_filename, dataset_name, train_X_sha256,
-                train_y_sha256, test_X_sha256, test_y_sha256):
-    h5_path = config.get_data_path(h5_filename)
-    if not os.path.exists(h5_path):
-        # Download MNIST binary files
-        train_X_path = _download_mnist('train-images-idx3-ubyte.gz',
-                                       train_X_sha256, source=base_url)
-        train_y_path = _download_mnist('train-labels-idx1-ubyte.gz',
-                                       train_y_sha256, source=base_url)
-        test_X_path = _download_mnist('t10k-images-idx3-ubyte.gz',
-                                      test_X_sha256, source=base_url)
-        test_y_path = _download_mnist('t10k-labels-idx1-ubyte.gz',
-                                      test_y_sha256, source=base_url)
+# Provide MNIST conversion as a function that can be re-used for fashion
+# MNIST
+def _convert_mnist(dataset_name, target_path, train_X_path, train_y_path,
+                   test_X_path, test_y_path):
+    print('Convering {} to HDF5'.format(dataset_name))
+    train_X_u8 = _read_mnist_images(train_X_path)
+    train_y = _read_mnist_labels(train_y_path)
+    test_X_u8 = _read_mnist_images(test_X_path)
+    test_y = _read_mnist_labels(test_y_path)
 
-        if train_X_path is not None and train_y_path is not None and \
-                test_X_path is not None and test_y_path is not None:
-            print('Convering {} to HDF5'.format(dataset_name))
-            train_X_u8 = _read_mnist_images(train_X_path)
-            train_y = _read_mnist_labels(train_y_path)
-            test_X_u8 = _read_mnist_images(test_X_path)
-            test_y = _read_mnist_labels(test_y_path)
+    f_out = tables.open_file(target_path, mode='w')
+    g_out = f_out.create_group(f_out.root, 'mnist', 'MNIST data')
+    f_out.create_array(g_out, 'train_X_u8', train_X_u8)
+    f_out.create_array(g_out, 'train_y', train_y)
+    f_out.create_array(g_out, 'test_X_u8', test_X_u8)
+    f_out.create_array(g_out, 'test_y', test_y)
 
-            f_out = tables.open_file(h5_path, mode='w')
-            g_out = f_out.create_group(f_out.root, 'mnist', 'MNIST data')
-            f_out.create_array(g_out, 'train_X_u8', train_X_u8)
-            f_out.create_array(g_out, 'train_y', train_y)
-            f_out.create_array(g_out, 'test_X_u8', test_X_u8)
-            f_out.create_array(g_out, 'test_y', test_y)
+    f_out.close()
 
-            f_out.close()
+    return target_path
 
-            os.remove(train_X_path)
-            os.remove(train_y_path)
-            os.remove(test_X_path)
-            os.remove(test_y_path)
-        else:
-            return None
 
-    return h5_path
+@dataset.fetch_and_convert_dataset(_SOURCES, _H5_FILENAME)
+def fetch_mnist(source_paths, target_path):
+    return _convert_mnist('MNIST', target_path, *source_paths)
 
 
 def delete_cache():  # pragma: no cover
-    h5_path = config.get_data_path(_H5_FILENAME)
-    if os.path.exists(h5_path):
-        os.remove(h5_path)
+    dataset.delete_dataset_cache(_H5_FILENAME)
 
 
 class MNISTBase (object):
@@ -120,11 +113,7 @@ class MNISTBase (object):
 
 class MNIST (MNISTBase):
     def __init__(self, n_val=10000, val_lower=0.0, val_upper=1.0):
-        h5_path = _load_mnist(
-            _MNIST_DIGITS_BASE_URL, _H5_FILENAME, 'MNIST',
-            _SHA256_TRAIN_IMAGES, _SHA256_TRAIN_LABELS,
-            _SHA256_TEST_IMAGES, _SHA256_TEST_LABELS
-        )
+        h5_path = fetch_mnist()
         if h5_path is not None:
             super(MNIST, self).__init__(h5_path, n_val, val_lower, val_upper)
         else:

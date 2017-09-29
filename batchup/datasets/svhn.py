@@ -5,22 +5,32 @@ import tables
 
 from .. import config
 from ..image.utils import ImageArrayUInt8ToFloat32
+from . import dataset
 
 
-def _download_svhn(filename, sha256,
-                   source='http://ufldl.stanford.edu/housenumbers/'):
-    temp_filename = os.path.join('temp', filename)
-    return config.download_data(temp_filename, source + filename, sha256)
-
-
+_SVHN_BASE_URL = 'http://ufldl.stanford.edu/housenumbers/'
 _SHA256_TRAIN_MAT = \
     '435e94d69a87fde4fd4d7f3dd208dfc32cb6ae8af2240d066de1df7508d083b8'
 _SHA256_TEST_MAT = \
     'cdce80dfb2a2c4c6160906d0bd7c68ec5a99d7ca4831afa54f09182025b6a75b'
 _SHA256_EXTRA_MAT = \
-    None
-_H5_TRAIN_TEST_FILENAME = 'svhn_train_test.h5'
+    'a133a4beb38a00fcdda90c9489e0c04f900b660ce8a316a5e854838379a71eb3'
+_H5_SVHN_FILENAME = 'svhn_train_test.h5'
 _H5_EXTRA_FILENAME = 'svhn_extra.h5'
+
+
+_TRAIN_SRC = dataset.DownloadSourceFile(
+    'train_32x32.mat', base_url=_SVHN_BASE_URL,
+    sha256=_SHA256_TRAIN_MAT)
+_TEST_SRC = dataset.DownloadSourceFile(
+    'test_32x32.mat', base_url=_SVHN_BASE_URL,
+    sha256=_SHA256_TEST_MAT)
+_EXTRA_SRC = dataset.DownloadSourceFile(
+    'extra_32x32.mat', base_url=_SVHN_BASE_URL,
+    sha256=_SHA256_EXTRA_MAT)
+
+_SVHN_SOURCES = [_TRAIN_SRC, _TEST_SRC]
+_EXTRA_SOURCES = [_EXTRA_SRC]
 
 
 def _read_svhn_matlab(mat_path):
@@ -31,44 +41,7 @@ def _read_svhn_matlab(mat_path):
     return m_X, m_y
 
 
-def _load_svhn_train_test():
-    h5_path = config.get_data_path(_H5_TRAIN_TEST_FILENAME)
-    if not os.path.exists(h5_path):
-        # Download SVHN Matlab files
-        train_path = _download_svhn('train_32x32.mat', _SHA256_TRAIN_MAT)
-        test_path = _download_svhn('test_32x32.mat', _SHA256_TEST_MAT)
-
-        if train_path is not None and test_path is not None:
-            f_out = tables.open_file(h5_path, mode='w')
-            g_out = f_out.create_group(f_out.root, 'svhn', 'SVHN data')
-
-            # Load in the training data Matlab file
-            print('Converting {} to HDF5...'.format(train_path))
-            train_X_u8, train_y = _read_svhn_matlab(train_path)
-            f_out.create_array(g_out, 'train_X_u8', train_X_u8)
-            f_out.create_array(g_out, 'train_y', train_y)
-            del train_X_u8
-            del train_y
-
-            # Load in the test data Matlab file
-            print('Converting {} to HDF5...'.format(test_path))
-            test_X_u8, test_y = _read_svhn_matlab(test_path)
-            f_out.create_array(g_out, 'test_X_u8', test_X_u8)
-            f_out.create_array(g_out, 'test_y', test_y)
-            del test_X_u8
-            del test_y
-
-            f_out.close()
-
-            os.remove(train_path)
-            os.remove(test_path)
-        else:
-            return None
-
-    return h5_path
-
-
-def _svhn_matlab_to_h5(h5_X, h5_y, mat_path):
+def _insert_svhn_matlab_to_h5(h5_X, h5_y, mat_path):
     mat = loadmat(mat_path)
     m_X = mat['X']
     m_y = mat['y']
@@ -81,47 +54,63 @@ def _svhn_matlab_to_h5(h5_X, h5_y, mat_path):
         h5_y.append(batch_y)
 
 
-def _load_svhn_extra():
-    h5_path = config.get_data_path(_H5_EXTRA_FILENAME)
-    if not os.path.exists(h5_path):
-        # Download SVHN Matlab file
-        extra_path = _download_svhn('extra_32x32.mat', _SHA256_EXTRA_MAT)
+@dataset.fetch_and_convert_dataset(_SVHN_SOURCES, _H5_SVHN_FILENAME)
+def fetch_svhn_train_test(source_paths, target_path):
+    train_path, test_path = source_paths
 
-        if extra_path is not None:
-            print('Converting {} to HDF5 (compressed)...'.format(extra_path))
-            f_out = tables.open_file(h5_path, mode='w')
-            g_out = f_out.create_group(f_out.root, 'svhn', 'SVHN data')
-            filters = tables.Filters(complevel=9, complib='blosc')
-            X_u8_arr = f_out.create_earray(
-                g_out, 'extra_X_u8', tables.UInt8Atom(), (0, 3, 32, 32),
-                filters=filters)
-            y_arr = f_out.create_earray(
-                g_out, 'extra_y', tables.Int32Atom(), (0,), filters=filters)
+    f_out = tables.open_file(target_path, mode='w')
+    g_out = f_out.create_group(f_out.root, 'svhn', 'SVHN data')
 
-            # Load in the extra data Matlab file
-            _svhn_matlab_to_h5(X_u8_arr, y_arr, extra_path)
+    # Load in the training data Matlab file
+    print('Converting {} to HDF5...'.format(train_path))
+    train_X_u8, train_y = _read_svhn_matlab(train_path)
+    f_out.create_array(g_out, 'train_X_u8', train_X_u8)
+    f_out.create_array(g_out, 'train_y', train_y)
+    del train_X_u8
+    del train_y
 
-            f_out.close()
+    # Load in the test data Matlab file
+    print('Converting {} to HDF5...'.format(test_path))
+    test_X_u8, test_y = _read_svhn_matlab(test_path)
+    f_out.create_array(g_out, 'test_X_u8', test_X_u8)
+    f_out.create_array(g_out, 'test_y', test_y)
+    del test_X_u8
+    del test_y
 
-            os.remove(extra_path)
-        else:
-            return None
+    f_out.close()
 
-    return h5_path
+    return target_path
+
+
+@dataset.fetch_and_convert_dataset(_EXTRA_SOURCES, _H5_EXTRA_FILENAME)
+def fetch_svhn_extra(source_paths, target_path):
+    extra_path = source_paths[0]
+
+    print('Converting {} to HDF5 (compressed)...'.format(extra_path))
+    f_out = tables.open_file(target_path, mode='w')
+    g_out = f_out.create_group(f_out.root, 'svhn', 'SVHN data')
+    filters = tables.Filters(complevel=9, complib='blosc')
+    X_u8_arr = f_out.create_earray(
+        g_out, 'extra_X_u8', tables.UInt8Atom(), (0, 3, 32, 32),
+        filters=filters)
+    y_arr = f_out.create_earray(
+        g_out, 'extra_y', tables.Int32Atom(), (0,), filters=filters)
+
+    # Load in the extra data Matlab file
+    _insert_svhn_matlab_to_h5(X_u8_arr, y_arr, extra_path)
+
+    f_out.close()
+
+    return target_path
 
 
 def delete_cache():  # pragma: no cover
-    h5_train_test_path = config.get_data_path(_H5_TRAIN_TEST_FILENAME)
-    if os.path.exists(h5_train_test_path):
-        os.remove(h5_train_test_path)
-    h5_extra_path = config.get_data_path(_H5_EXTRA_FILENAME)
-    if os.path.exists(h5_extra_path):
-        os.remove(h5_extra_path)
+    dataset.delete_dataset_cache(_H5_SVHN_FILENAME, _H5_EXTRA_FILENAME)
 
 
 class SVHN (object):
     def __init__(self, n_val=10000, val_lower=0.0, val_upper=1.0):
-        h5_path = _load_svhn_train_test()
+        h5_path = fetch_svhn_train_test()
         if h5_path is not None:
             f = tables.open_file(h5_path, mode='r')
 
@@ -153,7 +142,7 @@ class SVHN (object):
 
 class SVHNExtra (object):
     def __init__(self, val_lower=0.0, val_upper=1.0):
-        h5_path = _load_svhn_extra()
+        h5_path = fetch_svhn_extra()
         if h5_path is not None:
             f = tables.open_file(h5_path, mode='r')
 
