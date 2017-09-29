@@ -1,4 +1,5 @@
 import os
+import six
 from .. import config
 
 
@@ -6,10 +7,7 @@ class AbstractSourceFile (object):
     """
     Abstract source file
     """
-    def __init__(self, filename, sha256=None):
-        self.filename = filename
-        self.temp_filename = os.path.join('temp', filename)
-        self.path = config.get_data_path(self.temp_filename)
+    def __init__(self, sha256=None):
         self.sha256 = sha256
 
     def acquire(self, **kwargs):
@@ -17,7 +15,20 @@ class AbstractSourceFile (object):
             type(self)))
 
 
-class DownloadSourceFile (AbstractSourceFile):
+class BatchUpSourceFile (AbstractSourceFile):
+    """
+    Abstract source file that will be temporarily stored in BatchUp's
+    data directory.
+    """
+    def __init__(self, filename, sha256=None):
+        super(BatchUpSourceFile, self).__init__(sha256=sha256)
+        self.filename = filename
+        self.temp_filename = os.path.join('temp', filename)
+        self.path = config.get_data_path(self.temp_filename)
+        self.sha256 = sha256
+
+
+class DownloadSourceFile (BatchUpSourceFile):
     """
     A downloadable source file for a dataset.
 
@@ -63,16 +74,18 @@ class DownloadSourceFile (AbstractSourceFile):
 
         Returns
         -------
-        str
-            The path of the file in BatchUp's temporary directory
+        str or None
+            The path of the file in BatchUp's temporary directory or None if
+            the download failed.
         """
         return config.download_data(self.temp_filename, self.url,
                                     self.sha256)
 
 
-class CopySourceFile (AbstractSourceFile):
+class CopySourceFile (BatchUpSourceFile):
     """
-    A source file on the file system for a dataset.
+    A source file on the file system for a dataset that it to be copied into
+    BatchUp's temporary directory.
 
     Invoke the `acquire` method to copy the file to BatchUp's temporary
     directory. Will not copy the file if it is already present.
@@ -117,14 +130,70 @@ class CopySourceFile (AbstractSourceFile):
 
         Returns
         -------
-        str
-            The path of the file in BatchUp's temporary directory
+        str or None
+            The path of the file in BatchUp's temporary directory or None if
+            the copy failed.
         """
         if self.source_path is None:
             source_path = kwargs[self.arg_name]
         else:
             source_path = self.source_path
         return config.copy_data(self.temp_filename, source_path, self.sha256)
+
+
+class ExistingSourceFile (AbstractSourceFile):
+    """
+    A source file on the file system for a dataset that is in the correct
+    location.
+
+    Invoke the `acquire` method to ensure that the file exists and verify its
+    hash.
+    """
+
+    def __init__(self, path, sha256=None):
+        """
+        Constructor
+
+        Parameters
+        ----------
+        path: str or function
+            The path of the source file or a function of the form
+            `fn() -> str` that returns it
+        sha256: str or None
+            The expected SHA-256 hex digest of the file. The digest of the
+            file will be checked against this. If there is a mis-match, the
+            downloaded file will be deleted and the download will be
+            re-attempted.
+        """
+        if not isinstance(path, six.string_types) and not callable(path):
+            raise TypeError('path must either be a string or be callable '
+                            '(it is a {})'.format(type(path)))
+        super(ExistingSourceFile, self).__init__(sha256=sha256)
+        self.path = path
+
+    def __str__(self):
+        return 'file at {}'.format(self.path)
+
+    def acquire(self, **kwargs):
+        """
+        Copy the file and return its path
+
+        Returns
+        -------
+        str or None
+            The path of the file or None if it does not exist or if
+            verification failed.
+        """
+        if isinstance(self.path, six.string_types):
+            path = self.path
+        elif callable(self.path):
+            path = self.path()
+        else:
+            raise RuntimeError('This should not have happened')
+        if os.path.exists(path):
+            if config.verify_file(path, self.sha256):
+                return self.path
+        return None
 
 
 def fetch_and_convert_dataset(source_files, target_filename):
@@ -136,8 +205,10 @@ def fetch_and_convert_dataset(source_files, target_filename):
     ----------
     source_file: list of `AbstractSourceFile` instances
         A list of files to be acquired
-    target_filename: str
-        The name of the target file in which to store the converted data.
+    target_filename: str or callable
+        The name of the target file in which to store the converted data
+        either as a string or as a function of the form `fn() -> str`
+        that returns it.
 
     The conversion function is of the form `fn(source_paths, target_path)`.
     It should return `target_path` if successful, `None` otherwise.
@@ -221,9 +292,21 @@ def fetch_and_convert_dataset(source_files, target_filename):
     >>> usps_path = usps_data_offline_dynamic(
     ...    usps_path='look/here.h5') #doctest: +SKIP
     """
+    if not isinstance(target_filename, six.string_types) and \
+            not callable(target_filename):
+        raise TypeError(
+            'target_filename must either be a string or be callable (it is '
+            'a {})'.format(type(target_filename)))
+
     def decorate_fetcher(convert_function):
         def fetch(**kwargs):
-            target_path = config.get_data_path(target_filename)
+            if isinstance(target_filename, six.string_types):
+                target_fn = target_filename
+            elif callable(target_filename):
+                target_fn = target_filename()
+            else:
+                raise RuntimeError('This should not have happened')
+            target_path = config.get_data_path(target_fn)
 
             # If the target file does not exist, we need to acquire the
             # source files and convert them
@@ -274,6 +357,14 @@ def delete_dataset_cache(*filenames):
         Filenames of files to delete
     """
     for filename in filenames:
-        path = config.get_data_path(filename)
+        if isinstance(filename, six.string_types):
+            f = filename
+        elif callable(filename):
+            f = filename()
+        else:
+            raise TypeError(
+                'filenames must either be a strings or be callables (not '
+                '{})'.format(type(filename)))
+        path = config.get_data_path(f)
         if os.path.exists(path):
             os.remove(path)

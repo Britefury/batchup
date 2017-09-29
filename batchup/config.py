@@ -77,7 +77,10 @@ def get_data_path(filename):
     str
         The full path of the file
     """
-    return os.path.join(get_data_dir(), filename)
+    if os.path.isabs(filename):
+        return filename
+    else:
+        return os.path.join(get_data_dir(), filename)
 
 
 def download(path, source_url):
