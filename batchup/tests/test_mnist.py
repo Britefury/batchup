@@ -48,3 +48,15 @@ def test_val_10k():
 
     assert ds.test_y.shape == (10000,)
     assert ds.test_y.dtype == np.int32
+
+
+def test_train_test_split():
+    from batchup.datasets import mnist
+    from batchup.tests.dataset_test_helpers import sample_hashes
+
+    ds = mnist.MNIST(n_val=0)
+
+    train_h = sample_hashes(ds.train_X_u8)
+    test_h = sample_hashes(ds.test_X_u8)
+
+    assert set(train_h).intersection(set(test_h)) == set()

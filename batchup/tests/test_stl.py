@@ -26,9 +26,9 @@ def test_val_0():
     assert ds.test_y.shape == (8000,)
     assert ds.test_y.dtype == np.int32
 
-    assert ds.class_names == ['airplane', 'bird', 'car', 'cat',
-                              'deer', 'dog', 'horse', 'monkey', 'ship',
-                              'truck']
+    assert ds.class_names == [b'airplane', b'bird', b'car', b'cat',
+                              b'deer', b'dog', b'horse', b'monkey', b'ship',
+                              b'truck']
 
 
 @pytest.mark.bigdataset
@@ -55,6 +55,19 @@ def test_val_1fold():
     assert ds.test_y.shape == (8000,)
     assert ds.test_y.dtype == np.int32
 
-    assert ds.class_names == ['airplane', 'bird', 'car', 'cat',
-                              'deer', 'dog', 'horse', 'monkey', 'ship',
-                              'truck']
+    assert ds.class_names == [b'airplane', b'bird', b'car', b'cat',
+                              b'deer', b'dog', b'horse', b'monkey', b'ship',
+                              b'truck']
+
+
+@pytest.mark.bigdataset
+def test_train_test_split():
+    from batchup.datasets import stl
+    from batchup.tests.dataset_test_helpers import sample_hashes
+
+    ds = stl.STL(n_val_folds=1)
+
+    train_h = sample_hashes(ds.train_X_u8)
+    test_h = sample_hashes(ds.test_X_u8)
+
+    assert set(train_h).intersection(set(test_h)) == set()
