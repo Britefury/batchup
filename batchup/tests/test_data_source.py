@@ -1236,6 +1236,243 @@ def test_CompositeDataSource():
     assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
 
 
+def test_CompositeDataSource_in_order():
+    from batchup import data_source
+
+    # Test `CompositeDataSource` using an example layout; a generative
+    # adversarial network (GAN) for semi-supervised learning
+    # We have:
+    # - 15 supervised samples with ground truths; `sup_X`, `sup_y`
+    # - 33 unsupervised samples `unsup_X`
+    sup_X = np.random.normal(size=(15, 10))
+    sup_y = np.random.randint(0, 10, size=(15,))
+    unsup_X = np.random.normal(size=(33, 10))
+
+    # We need a dataset containing the supervised samples
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], repeats=-1)
+    # We need a dataset containing the unsupervised samples
+    unsup_ds = data_source.ArrayDataSource([unsup_X])
+
+    # We need to:
+    # - repeatedly iterate over the supervised samples
+    # - iterate over the unsupervised samples for the generator
+    # - iterate over the unsupervised samples again in a different order
+    #   for the discriminator
+    gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ])
+    struct_gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ], flatten=False)
+
+    # Check number of samples
+    assert gan_ds.num_samples() == 33
+
+    def check_structured_batch_layout(batch):
+        # Layout is:
+        # ((sup_x, sup_y), (gen_x,), (disc_x,))
+        assert isinstance(batch, tuple)
+        assert isinstance(batch[0], tuple)
+        assert isinstance(batch[1], tuple)
+        assert isinstance(batch[2], tuple)
+        assert len(batch) == 3
+        assert len(batch[0]) == 2
+        assert len(batch[1]) == 1
+        assert len(batch[2]) == 1
+
+    batches = list(gan_ds.batch_iterator(batch_size=10))
+    # Get the expected order for the supervised, generator and discriminator
+    # sets
+    order_sup = np.concatenate([np.arange(15)] * 3)
+    order_gen = np.concatenate([np.arange(33)] * 2)
+    order_dis = np.concatenate([np.arange(33)] * 2)
+    # Four batches
+    assert len(batches) == 4
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    assert len(batches[3]) == 4
+    # Verify values
+    assert (batches[0][0] == sup_X[order_sup[:10]]).all()
+    assert (batches[0][1] == sup_y[order_sup[:10]]).all()
+    assert (batches[0][2] == unsup_X[order_gen[:10]]).all()
+    assert (batches[0][3] == unsup_X[order_dis[:10]]).all()
+
+    assert (batches[1][0] == sup_X[order_sup[10:20]]).all()
+    assert (batches[1][1] == sup_y[order_sup[10:20]]).all()
+    assert (batches[1][2] == unsup_X[order_gen[10:20]]).all()
+    assert (batches[1][3] == unsup_X[order_dis[10:20]]).all()
+
+    assert (batches[2][0] == sup_X[order_sup[20:30]]).all()
+    assert (batches[2][1] == sup_y[order_sup[20:30]]).all()
+    assert (batches[2][2] == unsup_X[order_gen[20:30]]).all()
+    assert (batches[2][3] == unsup_X[order_dis[20:30]]).all()
+
+    assert (batches[3][0] == sup_X[order_sup[30:33]]).all()
+    assert (batches[3][1] == sup_y[order_sup[30:33]]).all()
+    assert (batches[3][2] == unsup_X[order_gen[30:33]]).all()
+    assert (batches[3][3] == unsup_X[order_dis[30:33]]).all()
+
+    # Now disable flattening, resulting in structured batches:
+    batches = list(struct_gan_ds.batch_iterator(batch_size=10))
+
+    # Four batches
+    assert len(batches) == 4
+    # Two items in each batch
+    check_structured_batch_layout(batches[0])
+    check_structured_batch_layout(batches[1])
+    check_structured_batch_layout(batches[2])
+    check_structured_batch_layout(batches[3])
+    # Verify values
+    assert (batches[0][0][0] == sup_X[order_sup[:10]]).all()
+    assert (batches[0][0][1] == sup_y[order_sup[:10]]).all()
+    assert (batches[0][1][0] == unsup_X[order_gen[:10]]).all()
+    assert (batches[0][2][0] == unsup_X[order_dis[:10]]).all()
+
+    assert (batches[1][0][0] == sup_X[order_sup[10:20]]).all()
+    assert (batches[1][0][1] == sup_y[order_sup[10:20]]).all()
+    assert (batches[1][1][0] == unsup_X[order_gen[10:20]]).all()
+    assert (batches[1][2][0] == unsup_X[order_dis[10:20]]).all()
+
+    assert (batches[2][0][0] == sup_X[order_sup[20:30]]).all()
+    assert (batches[2][0][1] == sup_y[order_sup[20:30]]).all()
+    assert (batches[2][1][0] == unsup_X[order_gen[20:30]]).all()
+    assert (batches[2][2][0] == unsup_X[order_dis[20:30]]).all()
+
+    assert (batches[3][0][0] == sup_X[order_sup[30:33]]).all()
+    assert (batches[3][0][1] == sup_y[order_sup[30:33]]).all()
+    assert (batches[3][1][0] == unsup_X[order_gen[30:33]]).all()
+    assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
+
+
+def test_CompositeDataSource_batch_indices_iterator():
+    from batchup import data_source
+
+    # Test `CompositeDataSource` using an example layout; a generative
+    # adversarial network (GAN) for semi-supervised learning
+    # We have:
+    # - 15 supervised samples with ground truths; `sup_X`, `sup_y`
+    # - 33 unsupervised samples `unsup_X`
+    sup_X = np.random.normal(size=(15, 10))
+    sup_y = np.random.randint(0, 10, size=(15,))
+    unsup_X = np.random.normal(size=(33, 10))
+
+    # We need a dataset containing the supervised samples
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], repeats=-1)
+    # We need a dataset containing the unsupervised samples
+    unsup_ds = data_source.ArrayDataSource([unsup_X])
+
+    # We need to:
+    # - repeatedly iterate over the supervised samples
+    # - iterate over the unsupervised samples for the generator
+    # - iterate over the unsupervised samples again in a different order
+    #   for the discriminator
+    gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ])
+
+    # Check number of samples
+    assert gan_ds.num_samples() == 33
+
+    batches = list(gan_ds.batch_indices_iterator(
+        batch_size=10, shuffle=np.random.RandomState(12345)))
+    # Get the expected order for the supervised, generator and discriminator
+    # sets
+    # Note: draw in the same order that the data source will
+    order_rng = np.random.RandomState(12345)
+    order_sup = order_rng.permutation(15)
+    order_gen = order_rng.permutation(33)
+    order_dis = order_rng.permutation(33)
+    order_sup = np.append(order_sup, order_rng.permutation(15))
+    order_sup = np.append(order_sup, order_rng.permutation(15))
+    order_gen = np.append(order_gen, order_rng.permutation(33))
+    order_dis = np.append(order_dis, order_rng.permutation(33))
+    # Four batches
+    assert len(batches) == 4
+    # Four items in each batch
+    assert len(batches[0]) == 3
+    assert len(batches[1]) == 3
+    assert len(batches[2]) == 3
+    assert len(batches[3]) == 3
+    # Verify values
+    assert (batches[0][0] == order_sup[:10]).all()
+    assert (batches[0][1] == order_gen[:10]).all()
+    assert (batches[0][2] == order_dis[:10]).all()
+
+    assert (batches[1][0] == order_sup[10:20]).all()
+    assert (batches[1][1] == order_gen[10:20]).all()
+    assert (batches[1][2] == order_dis[10:20]).all()
+
+    assert (batches[2][0] == order_sup[20:30]).all()
+    assert (batches[2][1] == order_gen[20:30]).all()
+    assert (batches[2][2] == order_dis[20:30]).all()
+
+    assert (batches[3][0] == order_sup[30:33]).all()
+    assert (batches[3][1] == order_gen[30:33]).all()
+    assert (batches[3][2] == order_dis[30:33]).all()
+
+
+def test_CompositeDataSource_batch_indices_iterator_in_order():
+    from batchup import data_source
+
+    # Test `CompositeDataSource` using an example layout; a generative
+    # adversarial network (GAN) for semi-supervised learning
+    # We have:
+    # - 15 supervised samples with ground truths; `sup_X`, `sup_y`
+    # - 33 unsupervised samples `unsup_X`
+    sup_X = np.random.normal(size=(15, 10))
+    sup_y = np.random.randint(0, 10, size=(15,))
+    unsup_X = np.random.normal(size=(33, 10))
+
+    # We need a dataset containing the supervised samples
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], repeats=-1)
+    # We need a dataset containing the unsupervised samples
+    unsup_ds = data_source.ArrayDataSource([unsup_X])
+
+    # We need to:
+    # - repeatedly iterate over the supervised samples
+    # - iterate over the unsupervised samples for the generator
+    # - iterate over the unsupervised samples again in a different order
+    #   for the discriminator
+    gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ])
+
+    # Check number of samples
+    assert gan_ds.num_samples() == 33
+
+    batches = list(gan_ds.batch_indices_iterator(batch_size=10))
+    # Get the expected order for the supervised, generator and discriminator
+    # sets
+    # Note: draw in the same order that the data source will
+    order_sup = np.concatenate([np.arange(15)] * 3, axis=0)
+    order_unsup = np.concatenate([np.arange(33)] * 2, axis=0)
+    # Four batches
+    assert len(batches) == 4
+    # Four items in each batch
+    assert len(batches[0]) == 3
+    assert len(batches[1]) == 3
+    assert len(batches[2]) == 3
+    assert len(batches[3]) == 3
+    # Verify values
+    assert (batches[0][0] == order_sup[:10]).all()
+    assert (batches[0][1] == order_unsup[:10]).all()
+    assert (batches[0][2] == order_unsup[:10]).all()
+
+    assert (batches[1][0] == order_sup[10:20]).all()
+    assert (batches[1][1] == order_unsup[10:20]).all()
+    assert (batches[1][2] == order_unsup[10:20]).all()
+
+    assert (batches[2][0] == order_sup[20:30]).all()
+    assert (batches[2][1] == order_unsup[20:30]).all()
+    assert (batches[2][2] == order_unsup[20:30]).all()
+
+    assert (batches[3][0] == order_sup[30:33]).all()
+    assert (batches[3][1] == order_unsup[30:33]).all()
+    assert (batches[3][2] == order_unsup[30:33]).all()
+
+
 def test_CompositeDataSource_no_trim():
     from batchup import data_source
 
