@@ -173,7 +173,7 @@ def fetch_and_convert_dataset(source_files, target_filename):
     >>>
     >>> # Now use it:
     >>> usps_path = usps_data_online() # doctest:+ELLIPSIS
-    ...
+    Downloading ...
 
     In this example, the USPS dataset will be acquired from a file on the
     filesystem. Note that the source path is fixed; the next example
