@@ -3,6 +3,15 @@ import six
 from .. import config
 
 
+def path_string(p):
+    if isinstance(p, six.string_types):
+        return p
+    elif callable(p):
+        return p()
+    else:
+        raise TypeError('A path should either be a string or a callable, '
+                        'not a {}'.format(type(p)))
+
 class AbstractSourceFile (object):
     """
     Abstract source file
@@ -172,7 +181,7 @@ class ExistingSourceFile (AbstractSourceFile):
         self.path = path
 
     def __str__(self):
-        return 'file at {}'.format(self.path)
+        return 'file at {}'.format(path_string(self.path))
 
     def acquire(self, **kwargs):
         """
@@ -184,15 +193,10 @@ class ExistingSourceFile (AbstractSourceFile):
             The path of the file or None if it does not exist or if
             verification failed.
         """
-        if isinstance(self.path, six.string_types):
-            path = self.path
-        elif callable(self.path):
-            path = self.path()
-        else:
-            raise RuntimeError('This should not have happened')
+        path = path_string(self.path)
         if os.path.exists(path):
             if config.verify_file(path, self.sha256):
-                return self.path
+                return path
         return None
 
 
@@ -300,12 +304,7 @@ def fetch_and_convert_dataset(source_files, target_filename):
 
     def decorate_fetcher(convert_function):
         def fetch(**kwargs):
-            if isinstance(target_filename, six.string_types):
-                target_fn = target_filename
-            elif callable(target_filename):
-                target_fn = target_filename()
-            else:
-                raise RuntimeError('This should not have happened')
+            target_fn = path_string(target_filename)
             target_path = config.get_data_path(target_fn)
 
             # If the target file does not exist, we need to acquire the
