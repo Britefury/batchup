@@ -1,3 +1,19 @@
+"""
+The `dataset` module provides functionality for acquiring datasets and
+converting them for use.
+
+The process normally consists of:
+1. acquiring source files; either downloading them or copying them from
+   elsewhere on the filesystem
+2. converting them for use; normally to HDF5 format
+
+This module takes care of some of the paperwork in the above process,
+allowing you to specify the sources needed in step 1 and the
+conversion code in step 2. BatchUp will take care of downloading, copying
+or acquiring the files you request, verifying their contents and invoking
+your conversion function, providing it with the necessary paths of
+source and output files.
+"""
 import os
 import six
 from .. import config
@@ -12,37 +28,49 @@ def path_string(p):
         raise TypeError('A path should either be a string or a callable, '
                         'not a {}'.format(type(p)))
 
+
 class AbstractSourceFile (object):
     """
     Abstract source file
+
+    Defines a method `acquire` that BatchUp will invoke in order to acquire
+    the source file.
     """
     def __init__(self, sha256=None):
         self.sha256 = sha256
 
-    def acquire(self, **kwargs):
+    def acquire(self, **kwargs):  # pragma: no cover
+        """
+        Acquire the source file and return it's path
+
+        Returns
+        -------
+        str or None
+            The path of the file or `None` if acquisition failed.
+        """
         raise NotImplementedError('Not implemented for {}'.format(
             type(self)))
 
 
 class BatchUpSourceFile (AbstractSourceFile):
     """
-    Abstract source file that will be temporarily stored in BatchUp's
-    data directory.
+    Abstract source file that will be temporarily stored in BatchUp's data
+    directory. After the conversion step, such files are normally deleted.
     """
     def __init__(self, filename, sha256=None):
         super(BatchUpSourceFile, self).__init__(sha256=sha256)
         self.filename = filename
         self.temp_filename = os.path.join('temp', filename)
         self.path = config.get_data_path(self.temp_filename)
-        self.sha256 = sha256
 
 
 class DownloadSourceFile (BatchUpSourceFile):
     """
     A downloadable source file for a dataset.
 
-    Invoke the `acquire` method to retrieve the file to BatchUp's temporary
-    directory. Will not download the file if it is already present.
+    When BatchUp invokes the `acquire' method, the file will be downloaded
+    to a temporary location, after which it can be converted for use.
+    Note that the file will not be downloaded if it is already present.
     """
     def __init__(self, filename, url=None, base_url=None, sha256=None):
         """
@@ -93,17 +121,22 @@ class DownloadSourceFile (BatchUpSourceFile):
 
 class CopySourceFile (BatchUpSourceFile):
     """
-    A source file on the file system for a dataset that it to be copied into
-    BatchUp's temporary directory.
+    A source file on the file system;
 
-    Invoke the `acquire` method to copy the file to BatchUp's temporary
-    directory. Will not copy the file if it is already present.
+    When BatchUp invokes the `acquire' method, the file will be copied
+    to a temporary location, after which it can be converted for use.
+    Note that the file will not be copied if it is already present.
     """
 
     def __init__(self, filename, source_path=None, arg_name=None,
                  sha256=None):
         """
         Constructor
+
+        If the source path needs to be determined at run-time (e.g. if you
+        must load a config file to determine it), provide an argument name to
+        the `arg_name` parameter instead of providing a `source_path`
+        parameter.
 
         Parameters
         ----------
@@ -153,10 +186,10 @@ class CopySourceFile (BatchUpSourceFile):
 class ExistingSourceFile (AbstractSourceFile):
     """
     A source file on the file system for a dataset that is in the correct
-    location.
+    location; e.g. it will not be copied to BatchUp's data directory.
 
-    Invoke the `acquire` method to ensure that the file exists and verify its
-    hash.
+    When BatchUp invokes the `acquire` method it will verify that the file
+    exists and verify its SHA-256 hash if provided.
     """
 
     def __init__(self, path, sha256=None):
@@ -294,7 +327,7 @@ def fetch_and_convert_dataset(source_files, target_filename):
     >>> # Now use it (note that the KW-arg `usps_path` is the same
     >>> # as the `arg_name` parameter given to `CopySourceFile` above:
     >>> usps_path = usps_data_offline_dynamic(
-    ...    usps_path='look/here.h5') #doctest: +SKIP
+    ...    usps_path=get_config('mypath')) #doctest: +SKIP
     """
     if not isinstance(target_filename, six.string_types) and \
             not callable(target_filename):
