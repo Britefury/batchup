@@ -2,7 +2,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = '0.1.dev1'
+version = '0.1.0'
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
@@ -14,6 +14,8 @@ install_requires = [
     'numpy',
     'scipy',
     'six',
+    'tables',
+    'joblib',
 ]
 
 tests_require = [
@@ -24,18 +26,17 @@ tests_require = [
 ]
 
 setup(
-    name="BatchUp",
+    name="batchup",
     version=version,
     description="Python library for extracting mini-batches of data from a data source for the purpose of training neural networks",
     long_description="\n\n".join([README]),
     classifiers=[
-        "Development Status :: 1 - Alpha",
+        "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 2.7",
-        # "Programming Language :: Python :: 3",
-        # "Programming Language :: Python :: 3.4",
+        "Programming Language :: Python :: 3.6",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         ],
     keywords="",

@@ -4,6 +4,8 @@ Python library for extracting mini-batches of data from a data source for the pu
 
 # Table of Contents
 
+#### Installation
+
 #### Batch iteration
 Processing data in mini-batches:
 - quick batch iteration; a basic example
@@ -29,6 +31,12 @@ BatchUp supports some standard machine learning datasets. They will be automatic
 #### Configuring BatchUp
 Data paths, etc.
 
+
+## Installation
+
+You can install BatchUp with:
+
+```> pip install batchup```
 
 ## Batch iteration
 ### Quick batch iteration
