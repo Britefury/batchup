@@ -1,4 +1,9 @@
 [run]
 omit =
     batchup/tests/*
-    batchup/datasets/*
+    batchup/datasets/cifar10.py
+    batchup/datasets/fashion_mnist.py
+    batchup/datasets/mnist.py
+    batchup/datasets/stl.py
+    batchup/datasets/svhn.py
+    batchup/datasets/usps.py

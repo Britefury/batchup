@@ -2,7 +2,7 @@ import os
 import sys
 import hashlib
 import shutil
-if sys.version_info[0] == 2:
+if sys.version_info[0] == 2:  # pragma: no cover
     from urllib import urlretrieve
     from ConfigParser import RawConfigParser
 else:
@@ -18,7 +18,7 @@ _config__ = None
 _data_dir_path__ = None
 
 
-def get_config():
+def get_config():  # pragma: no cover
     global _config__
     if _config__ is None:
         if os.path.exists(_CONFIG_PATH):
@@ -34,7 +34,7 @@ def get_config():
     return _config__
 
 
-def get_batchup_path():
+def get_batchup_path():  # pragma: no cover
     global _data_dir_path__
     if _data_dir_path__ is None:
         try:
@@ -77,7 +77,10 @@ def get_data_path(filename):
     str
         The full path of the file
     """
-    return os.path.join(get_data_dir(), filename)
+    if os.path.isabs(filename):
+        return filename
+    else:
+        return os.path.join(get_data_dir(), filename)
 
 
 def download(path, source_url):
@@ -96,7 +99,7 @@ def download(path, source_url):
     str
         The path of the file
     """
-    dir_path = os.path.split(path)[0]
+    dir_path = os.path.dirname(path)
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
     if not os.path.exists(path):
@@ -207,21 +210,31 @@ def download_and_verify(path, source_url, sha256):
     unverified_path = path + '.unverified'
     for i in range(_MAX_DOWNLOAD_TRIES):
         # Download it
-        unverified_path = download(unverified_path, source_url)
-
-        if os.path.exists(unverified_path):
-            # Got something...
-            if verify_file(unverified_path, sha256):
-                # Success: rename the unverified file to the destination
-                # filename
-                os.rename(unverified_path, path)
-                return path
-            else:
-                # Report failure
-                print('Download of {} unsuccessful; verification failed; '
-                      'deleting and re-trying...'.format(source_url))
-                # Delete so that we can retry
+        try:
+            unverified_path = download(unverified_path, source_url)
+        except Exception as e:
+            # Report failure
+            print(
+                'Download of {} unsuccessful; error {}; '
+                'deleting and re-trying...'.format(source_url, e))
+            # Delete so that we can retry
+            if os.path.exists(unverified_path):
                 os.remove(unverified_path)
+        else:
+            if os.path.exists(unverified_path):
+                # Got something...
+                if verify_file(unverified_path, sha256):
+                    # Success: rename the unverified file to the destination
+                    # filename
+                    os.rename(unverified_path, path)
+                    return path
+                else:
+                    # Report failure
+                    print(
+                        'Download of {} unsuccessful; verification failed; '
+                        'deleting and re-trying...'.format(source_url))
+                    # Delete so that we can retry
+                    os.remove(unverified_path)
 
     print('Did not succeed in downloading {} (tried {} times)'.format(
         source_url, _MAX_DOWNLOAD_TRIES
@@ -257,9 +270,15 @@ def copy_and_verify(path, source_path, sha256):
                 path, compute_sha256(path)))
         return path
 
+    if not os.path.exists(source_path):
+        return None
+
     # Compute the path of the unverified file
     unverified_path = path + '.unverified'
     # Copy it
+    dir_path = os.path.dirname(path)
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
     shutil.copy(source_path, unverified_path)
 
     if os.path.exists(unverified_path):
