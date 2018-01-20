@@ -10,6 +10,40 @@ def _setup_batchup_path(monkeypatch, path):
     monkeypatch.setattr(config, 'get_batchup_path', get_batchup_path_patch)
 
 
+def _setup_batchup_temp(monkeypatch):
+    import tempfile
+
+    tdir = tempfile.mkdtemp()
+
+    _setup_batchup_path(monkeypatch, tdir)
+
+    return tdir
+
+
+def _teardown_batchup_temp(tdir):
+    import shutil
+
+    shutil.rmtree(tdir)
+
+
+def _setup_batchup_temp_and_urlretrieve(monkeypatch, downloads=None):
+    import tempfile
+    from batchup import config
+
+    tdir = _setup_batchup_temp(monkeypatch)
+
+    def urlretrieve_patch(url, path, reporthook):
+        with open(path, 'w') as f:
+            f.write(url)
+        if downloads is not None:
+            downloads.append((url, path))
+        reporthook(1, len(url), len(url))
+
+    monkeypatch.setattr(config, 'urlretrieve', urlretrieve_patch)
+
+    return tdir
+
+
 def test_get_data_dir(monkeypatch):
     import os
     from batchup import config
@@ -33,22 +67,11 @@ def test_get_data_path(monkeypatch):
 
 def test_download(monkeypatch, capsys):
     import os
-    import tempfile
-    import shutil
     from batchup import config
 
     _downloads = []
 
-    def urlretrieve_patch(url, path, reporthook):
-        with open(path, 'w') as f:
-            f.write('hello world')
-        _downloads.append((url, path))
-        reporthook(10, 100, 1000)
-
-    tdir = tempfile.mkdtemp()
-
-    _setup_batchup_path(monkeypatch, tdir)
-    monkeypatch.setattr(config, 'urlretrieve', urlretrieve_patch)
+    tdir = _setup_batchup_temp_and_urlretrieve(monkeypatch, _downloads)
 
     download_path = os.path.join(tdir, 'a', 'b', 'c', 'd.h5')
 
@@ -65,7 +88,7 @@ def test_download(monkeypatch, capsys):
 
     assert os.path.exists(os.path.join(tdir, 'a', 'b', 'c'))
     assert os.path.exists(download_path)
-    assert open(download_path, 'r').read() == 'hello world'
+    assert open(download_path, 'r').read() == 'myurl/d.h5'
 
     # Attempting to download a second time should exit
     res = config.download(download_path, 'myurl/d.h5')
@@ -74,7 +97,7 @@ def test_download(monkeypatch, capsys):
     out, err = capsys.readouterr()
     assert out == ''
 
-    shutil.rmtree(tdir)
+    _teardown_batchup_temp(tdir)
 
 
 def test_download_err(monkeypatch):

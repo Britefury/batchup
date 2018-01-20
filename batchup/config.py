@@ -270,6 +270,9 @@ def copy_and_verify(path, source_path, sha256):
                 path, compute_sha256(path)))
         return path
 
+    if not os.path.exists(source_path):
+        return None
+
     # Compute the path of the unverified file
     unverified_path = path + '.unverified'
     # Copy it

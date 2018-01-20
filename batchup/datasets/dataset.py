@@ -51,6 +51,9 @@ class AbstractSourceFile (object):
         raise NotImplementedError('Not implemented for {}'.format(
             type(self)))
 
+    def clean_up(self):  # pragma: no cover
+        pass
+
 
 class BatchUpSourceFile (AbstractSourceFile):
     """
@@ -62,6 +65,10 @@ class BatchUpSourceFile (AbstractSourceFile):
         self.filename = filename
         self.temp_filename = os.path.join('temp', filename)
         self.path = config.get_data_path(self.temp_filename)
+
+    def clean_up(self):
+        if os.path.exists(self.path):
+            os.remove(self.path)
 
 
 class DownloadSourceFile (BatchUpSourceFile):
@@ -95,7 +102,7 @@ class DownloadSourceFile (BatchUpSourceFile):
         super(DownloadSourceFile, self).__init__(filename, sha256=sha256)
         if url is None:
             if base_url is None:
-                raise ValueError('Must provide either url or base_url')
+                raise TypeError('Must provide either url or base_url')
             if base_url.endswith('/'):
                 url = base_url + filename
             else:
@@ -158,7 +165,7 @@ class CopySourceFile (BatchUpSourceFile):
         """
         super(CopySourceFile, self).__init__(filename, sha256=sha256)
         if source_path is None and arg_name is None:
-            raise ValueError('Either source_path or arg_name must be provided')
+            raise TypeError('Either source_path or arg_name must be provided')
         self.source_path = source_path
         self.arg_name = arg_name
 
@@ -335,6 +342,12 @@ def fetch_and_convert_dataset(source_files, target_filename):
             'target_filename must either be a string or be callable (it is '
             'a {})'.format(type(target_filename)))
 
+    for src in source_files:
+        if not isinstance(src, AbstractSourceFile):
+            raise TypeError('source_files should contain'
+                            '`AbstractSourceFile` instances, '
+                            'not {}'.format(type(src)))
+
     def decorate_fetcher(convert_function):
         def fetch(**kwargs):
             target_fn = path_string(target_filename)
@@ -346,12 +359,11 @@ def fetch_and_convert_dataset(source_files, target_filename):
                 # Acquire the source files
                 source_paths = []
                 for src in source_files:
-                    if not isinstance(src, AbstractSourceFile):
-                        raise TypeError('source_files should contain'
-                                        '`SourceFile` instances, '
-                                        'not {}'.format(type(src)))
                     p = src.acquire(**kwargs)
                     if p is not None:
+                        if p in source_paths:
+                            raise ValueError(
+                                'Duplicate source file {}'.format(p))
                         source_paths.append(p)
                     else:
                         print('Failed to acquire {}'.format(src))
@@ -363,9 +375,8 @@ def fetch_and_convert_dataset(source_files, target_filename):
 
                 # If successful, delete the source files
                 if converted_path is not None:
-                    for p in source_paths:
-                        if os.path.exists(p):
-                            os.remove(p)
+                    for src in source_files:
+                        src.clean_up()
 
                 return converted_path
             else:
@@ -389,14 +400,7 @@ def delete_dataset_cache(*filenames):
         Filenames of files to delete
     """
     for filename in filenames:
-        if isinstance(filename, six.string_types):
-            f = filename
-        elif callable(filename):
-            f = filename()
-        else:
-            raise TypeError(
-                'filenames must either be a strings or be callables (not '
-                '{})'.format(type(filename)))
-        path = config.get_data_path(f)
+        filename = path_string(filename)
+        path = config.get_data_path(filename)
         if os.path.exists(path):
             os.remove(path)
