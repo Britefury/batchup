@@ -242,7 +242,7 @@ def test_download_data(monkeypatch, capsys):
     assert _downloads[0] == ('myurl/d.h5', download_path + '.unverified')
     assert os.path.exists(download_path)
     assert open(download_path, 'r').read() == 'hello world'
-    _downloads.clear()
+    del _downloads[:]
 
     # Attempting to download a second time should exit
     _download_data[:] = [('hello world', None)]
@@ -278,7 +278,7 @@ def test_download_data(monkeypatch, capsys):
     assert len(_downloads) == 3
     assert out == '{}\n{}\n'.format(line1, line2)
 
-    _downloads.clear()
+    del _downloads[:]
     os.remove(download_path)
 
     # Now test for complete failure
@@ -351,7 +351,7 @@ def test_copy_data(monkeypatch, capsys):
     assert open(dest_path, 'r').read() == 'hello world'
     out, err = capsys.readouterr()
     assert out == ''
-    _copies.clear()
+    del _copies[:]
 
     # Attempting to download a second time should exit
     res = config.copy_and_verify(dest_path, source_path, expected)
@@ -368,7 +368,7 @@ def test_copy_data(monkeypatch, capsys):
     assert out == 'The SHA-256 of {} is "{}"\n'.format(dest_path, expected)
 
     os.remove(dest_path)
-    _copies.clear()
+    del _copies[:]
 
     # Try failing verification
     res = config.copy_and_verify(dest_path, source_path, bad_expected)
@@ -379,6 +379,6 @@ def test_copy_data(monkeypatch, capsys):
     assert len(_copies) == 1
     assert _copies[0] == (source_path, dest_path + '.unverified')
     assert not os.path.exists(dest_path)
-    _copies.clear()
+    del _copies[:]
 
     shutil.rmtree(tdir)
