@@ -12,7 +12,7 @@ Processing data in mini-batches:
 - iterating over subsets identified by indices
 - including sample indices in the mini-batches
 - infinite batch iteration; an iterator that generates batches endlessly
-- sample weighting to alter likelihood of samples (e.g. for class imbalance)
+- sample weighting to alter likelihood of samples (e.g. to compensate for class imbalance)
 - iterating over two data sets simultaneously where their sizes differ (e.g. for semi-supervised learning)
 - iterating over data sets that are NOT stored as NumPy arrays (e.g. on disk or generated on the fly)
 - parallel processing to speed up iteration where loading/preparing samples could be slow
@@ -131,7 +131,7 @@ from batchup import sampling
 
 # NOTE that that parameter is called `sub_weights` (rather than `weights`) and that it must have the
 # same length as `indices`.
-sampler = sampling.WeightedSubsetSampler(sub_weights=train_w, indices=subset_a)
+sampler = sampling.WeightedSubsetSampler(sub_weights=train_w[subset_a], indices=subset_a)
 ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
 # Drawing batches of 64 elements in random order
 for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
