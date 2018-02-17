@@ -629,8 +629,8 @@ class WeightedSubsetSampler (AbstractSampler):
         """
         if len(sub_weights) != len(indices):
             raise ValueError(
-                'sub_weights and indices should have the same length; {} != {}'.format(
-                    len(sub_weights), len(indices)))
+                'sub_weights and indices should have the same length; '
+                '{} != {}'.format(len(sub_weights), len(indices)))
         sub_weights_sum = sub_weights.sum()
         if sub_weights_sum == 0.0:
             raise ValueError('sub_weights should not sum to 0')
