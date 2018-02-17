@@ -584,7 +584,7 @@ class WeightedSampler (AbstractSampler):
         return sample_weight
 
     @staticmethod
-    def class_balancing_sampler(y, n_classes=0):
+    def class_balancing_sampler(y, n_classes=None):
         """
         Construct a `WeightedSampler` that compensates for class imbalance.
 
@@ -719,7 +719,7 @@ class WeightedSubsetSampler (AbstractSampler):
                                      p=self.sub_weights)
 
     @staticmethod
-    def class_balancing_sampler(y, indices, n_classes=0):
+    def class_balancing_sampler(y, indices, n_classes=None):
         """
         Construct a `WeightedSubsetSampler` that compensates for class
         imbalance.
