@@ -556,7 +556,7 @@ class WeightedSampler (AbstractSampler):
                                      p=self.weights)
 
     @staticmethod
-    def class_balancing_sample_weights(y, n_classes=0):
+    def class_balancing_sample_weights(y, n_classes=None):
         """
         Compute sample weight given an array of sample classes. The weights
         are assigned on a per-class basis and the per-class weights are
@@ -566,7 +566,7 @@ class WeightedSampler (AbstractSampler):
         ----------
         y: NumPy array, 1D dtype=int
             sample classes
-        n_classes: int, default=0
+        n_classes: int, default=None
             number of classes. If 0, it will be assumed to be `y.max()+ 1`
 
         Returns
@@ -574,7 +574,10 @@ class WeightedSampler (AbstractSampler):
         NumPy array, 1D dtype=float
             per sample weight array
         """
-        h = np.bincount(y, minlength=n_classes)
+        if n_classes is not None:
+            h = np.bincount(y, minlength=n_classes)
+        else:
+            h = np.bincount(y)
         cls_weight = 1.0 / (h.astype(float) * len(h))
         cls_weight[np.isnan(cls_weight)] = 0.0
         sample_weight = cls_weight[y]
@@ -625,9 +628,9 @@ class WeightedSubsetSampler (AbstractSampler):
             from data that are to be used
         """
         if len(sub_weights) != len(indices):
-            raise ValueError('sub_weights and indices should have the same '
-                             'length; {} != {}'.format(
-                len(sub_weights), len(indices)))
+            raise ValueError(
+                'sub_weights and indices should have the same length; {} != {}'.format(
+                    len(sub_weights), len(indices)))
         sub_weights_sum = sub_weights.sum()
         if sub_weights_sum == 0.0:
             raise ValueError('sub_weights should not sum to 0')
