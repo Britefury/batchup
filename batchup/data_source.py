@@ -8,27 +8,7 @@ network training functions.
 import six
 import collections
 import numpy as np
-
-
-def _num_batches(n, batch_size):
-    """Compute the number of mini-batches required to cover a data set of
-    size `n` using batches of size `batch_size`.
-
-    Parameters
-    ----------
-    n: int
-        the number of samples in the data set
-    batch_size: int
-        the mini-batch size
-
-    Returns
-    -------
-    int: the number of batches required
-    """
-    b = n // batch_size
-    if n % batch_size > 0:
-        b += 1
-    return b
+from batchup import sampling
 
 
 def _length_of_batch(batch):
@@ -201,7 +181,7 @@ class AbstractDataSource (object):
                 raise ValueError('Data set has infinite size but no n_batches '
                                  'limit specified')
             elif n is not None:
-                n_batches = _num_batches(n, batch_size)
+                n_batches = sampling.num_batches(n, batch_size)
         batch_iter = self.batch_iterator(batch_size, **kwargs)
         return batch_map_concat(func, batch_iter, progress_iter_func,
                                 n_batches, prepend_args)
@@ -315,7 +295,7 @@ class AbstractDataSource (object):
                 raise ValueError('Data set has infinite size but no n_batches '
                                  'limit specified')
             elif n is not None:
-                n_batches = _num_batches(n, batch_size)
+                n_batches = sampling.num_batches(n, batch_size)
         batch_iter = self.batch_iterator(batch_size, **kwargs)
         return batch_map_mean(func, batch_iter, progress_iter_func,
                               sum_axis, n_batches, prepend_args)
@@ -335,23 +315,15 @@ class RandomAccessDataSource (AbstractDataSource):
 
     Attributes
     ----------
-    length: int
-        The number of samples available (will be the same length as the
-        `indices` array if available
-    indices: NumPy array, 1D dtype=int or None
-        An array of indices that identify the subset of samples drawn
-        from data that are to be used
-    repeats: int (default=1)
-        The number of repetitions, or `-1` for infinite. A value of 0 or
-        a negative value that is not -1 will cause `ValueError` to be
-        raised.
     include_indices: bool (default=False)
         If `True`, each mini-batch generated will be prefixed with an
         array that provides the indices of the samples that were drawn
         to make the mini-batch
-
+    sampler: instance of subclass of `sampler.AbstractSampler`
+        The sampler use to draw indices of samples to extract from this
+        data source
     """
-    def __init__(self, length, indices=None, repeats=1,
+    def __init__(self, length, indices=None, repeats=1, sampler=None,
                  include_indices=False):
         """
         Constructor for random access data source
@@ -367,23 +339,33 @@ class RandomAccessDataSource (AbstractDataSource):
             The number of repetitions, or `-1` for infinite. A value of 0 or
             a negative value that is not -1 will cause `ValueError` to be
             raised.
+        sampler: instance of subclass of `sampler.AbstractSampler` or `None`
+            The sampler use to draw indices of samples to extract from this
+            data source. If a sampler is provided, then `indices` should be
+            `None` and `repeats` should be 1
         include_indices: bool (default=False)
             If `True`, each mini-batch generated will be prefixed with an
             array that provides the indices of the samples that were drawn
             to make the mini-batch
         """
-        if repeats == 0 or repeats < -1:
-            raise ValueError('Invalid number of repeats; should be >= 1 or '
-                             '-1, not {}'.format(repeats))
-        self.indices = indices
-        self.repeats = repeats
-        self.include_indices = include_indices
-        if self.indices is not None:
-            # The number of samples is the size of `indices`
-            self.length = len(self.indices)
+        if sampler is not None:
+            if repeats != 1:
+                raise ValueError('repeats should be 1 when sampler is '
+                                 'provided')
+            if indices is not None:
+                raise ValueError('indices should be None when sampler is '
+                                 'provided')
         else:
-            # Get the length from the first array
-            self.length = length
+            if repeats == 0 or repeats < -1:
+                raise ValueError('Invalid number of repeats; should be >= 1 '
+                                 'or -1, not {}'.format(repeats))
+        self.include_indices = include_indices
+        if sampler is None:
+            if indices is None:
+                sampler = sampling.StandardSampler(length, repeats=repeats)
+            else:
+                sampler = sampling.SubsetSampler(indices, repeats=repeats)
+        self.sampler = sampler
 
     @property
     def is_random_access(self):
@@ -412,10 +394,7 @@ class RandomAccessDataSource (AbstractDataSource):
             `length` parameter passed to the constructor, or the length of
             the indices array if provided.
         """
-        if self.repeats == -1:
-            return np.inf
-        else:
-            return self.length * self.repeats
+        return self.sampler.num_indices_generated()
 
     def samples_by_indices_nomapping(self, indices):
         """
@@ -451,8 +430,7 @@ class RandomAccessDataSource (AbstractDataSource):
         list of arrays
             A mini-batch in the form of a list of NumPy arrays
         """
-        if self.indices is not None:
-            indices = self.indices[indices]
+        indices = self.sampler.map_indices(indices)
         return self.samples_by_indices_nomapping(indices)
 
     def batch_indices_iterator(self, batch_size, shuffle=None, **kwargs):
@@ -472,9 +450,8 @@ class RandomAccessDataSource (AbstractDataSource):
         samples identified in that array is used, rather than the complete
         set of samples.
 
-        The generated mini-batches indices take the form of either:
-        - 1D NumPy integer arrays
-        - slices
+        The generated mini-batches indices take the form of 1D NumPy integer
+        arrays.
 
         Parameters
         ----------
@@ -489,147 +466,15 @@ class RandomAccessDataSource (AbstractDataSource):
         Returns
         -------
         iterator
-            An iterator that generates items that are either slices or
-            1D NumPy integer arrays.
+            An iterator that generates mini-batches in the form of 1D NumPy
+            integer arrays.
         """
-        shuffle = self._get_shuffle_rng(shuffle)
-        if self.repeats == 1:
-            if shuffle is not None:
-                if self.indices is not None:
-                    indices = shuffle.permutation(self.indices)
-                else:
-                    indices = shuffle.permutation(self.length)
-                for i in range(0, self.length, batch_size):
-                    yield indices[i:i + batch_size]
-            else:
-                if self.indices is not None:
-                    for i in range(0, self.length, batch_size):
-                        yield self.indices[i:i + batch_size]
-                else:
-                    for i in range(0, self.length, batch_size):
-                        yield np.arange(i, min(i + batch_size, self.length))
+        shuffle_rng = self._get_shuffle_rng(shuffle)
+        if shuffle_rng is not None:
+            return self.sampler.shuffled_indices_batch_iterator(
+                batch_size, shuffle_rng)
         else:
-            repeats = self.repeats
-            if shuffle is not None:
-                if self.indices is not None:
-                    indices = shuffle.permutation(self.indices)
-                else:
-                    indices = shuffle.permutation(self.length)
-                i = 0
-                while True:
-                    j = i + batch_size
-                    if j <= self.length:
-                        # Within size of data
-                        yield indices[i:j]
-                        i = j
-                    else:
-                        # Multiple restarts required to fill the batch
-                        batch_ndx = np.arange(0)
-                        while len(batch_ndx) < batch_size:
-                            # Wrap over
-                            k = min(batch_size - len(batch_ndx),
-                                    self.length - i)
-                            batch_ndx = np.append(
-                                batch_ndx, indices[i:i + k], axis=0)
-                            i += k
-
-                            if i >= self.length:
-                                # Loop over; new permutation
-                                if self.indices is not None:
-                                    indices = shuffle.permutation(self.indices)
-                                else:
-                                    indices = shuffle.permutation(self.length)
-                                i -= self.length
-                                # Reduce the number of remaining repeats
-                                if repeats != -1:
-                                    repeats -= 1
-                                if repeats == 0:
-                                    break
-
-                        if len(batch_ndx) > 0:
-                            yield batch_ndx
-                        if repeats == 0:
-                            break
-            else:
-                if self.indices is not None:
-                    i = 0
-                    while True:
-                        j = i + batch_size
-                        if j <= self.length:
-                            # Within size of data
-                            yield self.indices[i:j]
-                            i = j
-                        else:
-                            # Multiple restarts required to fill the batch
-                            batch_ndx = np.arange(0)
-                            while len(batch_ndx) < batch_size:
-                                # Wrap over
-                                k = min(batch_size - len(batch_ndx),
-                                        self.length - i)
-                                batch_ndx = np.append(
-                                    batch_ndx, self.indices[i:i + k], axis=0)
-                                i += k
-                                if i >= self.length:
-                                    i -= self.length
-                                    # Reduce the number of remaining repeats
-                                    if repeats != -1:
-                                        repeats -= 1
-                                    if repeats == 0:
-                                        break
-
-                            if len(batch_ndx) > 0:
-                                yield batch_ndx
-                            if repeats == 0:
-                                break
-                else:
-                    i = 0
-                    while True:
-                        j = i + batch_size
-                        if j <= self.length:
-                            # Within size of data
-                            yield np.arange(i, j)
-                            i = j
-                        elif j <= self.length * 2:
-                            # One restart is required
-                            # Reduce the number of remaining repeats
-                            if repeats != -1:
-                                repeats -= 1
-                            if repeats == 0:
-                                # Finished; emit remaining elements
-                                if i < self.length:
-                                    yield np.arange(i, self.length)
-                                break
-
-                            # Wrap over
-                            # Compute number of elements required to make up
-                            # the batch
-                            k = batch_size - (self.length - i)
-                            yield np.append(np.arange(i, self.length),
-                                            np.arange(0, k), axis=0)
-                            i = k
-                        else:
-                            # Multiple restarts required to fill the batch
-                            batch_ndx = np.arange(0)
-                            # i = 0
-                            while len(batch_ndx) < batch_size:
-                                # Wrap over
-                                k = min(batch_size - len(batch_ndx),
-                                        self.length - i)
-                                batch_ndx = np.append(
-                                    batch_ndx, np.arange(i, i + k), axis=0)
-                                i += k
-                                if i >= self.length:
-                                    i -= self.length
-                                    # Reduce the number of remaining repeats
-                                    if repeats != -1:
-                                        repeats -= 1
-                                    if repeats == 0:
-                                        break
-
-                            if len(batch_ndx) > 0:
-                                yield batch_ndx
-                            if repeats == 0:
-                                break
+            return self.sampler.in_order_indices_batch_iterator(batch_size)
 
     def batch_iterator(self, batch_size, shuffle=None, **kwargs):
         """
@@ -703,13 +548,9 @@ class ArrayDataSource (RandomAccessDataSource):
     ----------
     data: list
         A list of arrays from which data is drawn.
-    indices: NumPy array, 1D dtype=int or None
-        An array of indices that identify the subset of samples drawn
-        from data that are to be used
-    repeats: int (default=1)
-        The number of repetitions, or `-1` for infinite. A value of 0 or
-        a negative value that is not -1 will cause `ValueError` to be
-        raised.
+    sampler: instance of subclass of `sampler.AbstractSampler`
+        The sampler use to draw indices of samples to extract from this
+        data source
     include_indices: bool (default=False)
         If `True`, each mini-batch generated will be prefixed with an
         array that provides the indices of the samples that were drawn
@@ -755,17 +596,30 @@ class ArrayDataSource (RandomAccessDataSource):
     The `repeats` parameter will cause the iterator to walk over the data
     a specified number of times:
     >>> ds_10 = ArrayDataSource([X, y], repeats=10)
-    >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=rng):
+    >>> for batch_X, batch_y in ds_10.batch_iterator(5, shuffle=rng):
     ...     # Perform operations on batch_X and batch_y
     ...     break
 
     If it is given the value `-1`, the iterator will repeat infinitely:
+    >>> import itertools
     >>> ds_inf = ArrayDataSource([X, y], repeats=-1)
-    >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=rng):
+    >>> inf_batch_iter = ds_inf.batch_iterator(5, shuffle=rng)
+    >>> for batch_X, batch_y in itertools.islice(inf_batch_iter, 5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     break
+
+    Draw samples randomly according to a sample weighting by specifying
+    a sampler:
+    >>> sampler = sampling.WeightedSampler(
+    ...     weights=np.array([0.1, 0.2, 0.3, 0.4]))
+    >>> ds_w = ArrayDataSource([X, y], sampler=sampler)
+    >>> inf_w_batch_iter = ds_w.batch_iterator(5, shuffle=rng)
+    >>> for batch_X, batch_y in itertools.islice(inf_w_batch_iter, 5):
     ...     # Perform operations on batch_X and batch_y
     ...     break
     """
-    def __init__(self, data, indices=None, repeats=1, include_indices=False):
+    def __init__(self, data, indices=None, repeats=1, sampler=None,
+                 include_indices=False):
         """
         Parameters
         ----------
@@ -778,6 +632,10 @@ class ArrayDataSource (RandomAccessDataSource):
             The number of repetitions, or `-1` for infinite. A value of 0 or
             a negative value that is not -1 will cause `ValueError` to be
             raised.
+        sampler: instance of subclass of `sampler.AbstractSampler` or `None`
+            The sampler use to draw indices of samples to extract from this
+            data source. If a sampler is provided, then `indices` should be
+            `None` and `repeats` should be 1
         include_indices: bool (default=False)
             If `True`, each mini-batch generated will be prefixed with an
             array that provides the indices of the samples that were drawn
@@ -800,7 +658,7 @@ class ArrayDataSource (RandomAccessDataSource):
         self.data = data
 
         super(ArrayDataSource, self).__init__(
-            length, indices=indices, repeats=repeats,
+            length, indices=indices, repeats=repeats, sampler=sampler,
             include_indices=include_indices)
 
     def samples_by_indices_nomapping(self, indices):

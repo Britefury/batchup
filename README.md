@@ -12,6 +12,7 @@ Processing data in mini-batches:
 - iterating over subsets identified by indices
 - including sample indices in the mini-batches
 - infinite batch iteration; an iterator that generates batches endlessly
+- sample weighting to alter likelihood of samples (e.g. to compensate for class imbalance)
 - iterating over two data sets simultaneously where their sizes differ (e.g. for semi-supervised learning)
 - iterating over data sets that are NOT stored as NumPy arrays (e.g. on disk or generated on the fly)
 - parallel processing to speed up iteration where loading/preparing samples could be slow
@@ -103,6 +104,65 @@ Now use the `batch_iterator` method as before.
 The `repeats` parameter accepts either `-1` for infininte, or any positive integer `>= 1` for a specified number of repetitions.
 
 This will also work if the dataset has less samples than the batch size; not a common use case but can happen in certain situations involving semi-supervised learning for instance.
+
+### Sample weighting to alter likelihood of samples
+
+If you want some samples to be drawn more frequently than others, construct a `sampling.WeightedSampler` and pass
+it as the `sampler` argument to the `ArrayDataSource` constructor. In the example the per-sample weights are stored
+in `train_w`.
+
+```py3
+from batchup import sampling
+
+sampler = sampling.WeightedSampler(weights=train_w)
+ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+# Drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
+
+**Note** that in-order is NOT supported when using `sampling.WeightedSampler`, so `shuffle` *cannot* be `False` or
+`None`.
+
+To draw from a subset of the dataset, use `sampling.WeightedSubsetSampler`:
+
+```py3
+from batchup import sampling
+
+# NOTE that that parameter is called `sub_weights` (rather than `weights`) and that it must have the
+# same length as `indices`.
+sampler = sampling.WeightedSubsetSampler(sub_weights=train_w[subset_a], indices=subset_a)
+ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+# Drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
+
+
+#### Class balancing helper
+
+An alternate constructor `sampling.WeightedSampler.class_balancing_sampler` is available to construct a weighted sampler to compensate for class imbalance:
+
+```py3
+# Construct the sampler; NOTE that the `n_classes` argument is *optional*
+sampler = sampling.WeightedSampler.class_balancing_sampler(y=train_y, n_classes=train_y.max() + 1)
+ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+# Drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
+
+The `sampling.WeightedSampler.class_balancing_sample_weights` constructs an array of sample weights for you,
+in case you wish to modify the weights first:
+```py3
+weights = sampling.WeightedSampler.class_balancing_sample_weights(y=train_y, n_classes=train_y.max() + 1)
+# Assume `modify_weights` is defined above
+weights = modify_weights(weights)
+# Drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
+
 
 ### Iterating over two data sources of wildly different sizes for semi-supervised learning
 

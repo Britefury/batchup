@@ -32,13 +32,6 @@ def test_length_of_batch():
     assert data_source._length_of_batch([[X], Y]) == 2
 
 
-def test_num_batches():
-    from batchup import data_source
-
-    assert data_source._num_batches(20, 5) == 4
-    assert data_source._num_batches(21, 5) == 5
-
-
 def test_trim_batch():
     from batchup import data_source
 
@@ -397,7 +390,7 @@ def test_RandomAccessDataSource_indices_repeated_small_dataset():
 
 
 def test_ArrayDataSource():
-    from batchup import data_source
+    from batchup import data_source, sampling
 
     # Test `len(ds)`
     a3a = np.arange(3)
@@ -493,6 +486,20 @@ def test_ArrayDataSource():
     assert (batches[1][1] == Y[order[15:30]]).all()
     assert (batches[2][0] == X[order[30:]]).all()
     assert (batches[2][1] == Y[order[30:]]).all()
+
+    # Ensure that indices/repeats/sampler parameter sanity check works
+    sampler = sampling.StandardSampler(10)
+    with pytest.raises(ValueError):
+        _ = data_source.ArrayDataSource([X, Y], indices=np.arange(3),
+                                        sampler=sampler)
+
+    with pytest.raises(ValueError):
+        _ = data_source.ArrayDataSource([X, Y], repeats=2,
+                                        sampler=sampler)
+
+    with pytest.raises(ValueError):
+        _ = data_source.ArrayDataSource([X, Y], repeats=-1,
+                                        sampler=sampler)
 
     # Check that constructing an array data source given input arrays
     # of differing lengths raises ValueError
@@ -843,6 +850,11 @@ def test_ArrayDataSource_include_indices():
     assert (batch[2] == Y[:15]).all()
 
     batch = ads_sub.samples_by_indices_nomapping(np.arange(15))
+    assert (batch[0] == np.arange(15)).all()
+    assert (batch[1] == X[:15]).all()
+    assert (batch[2] == Y[:15]).all()
+
+    batch = ads_sub.samples_by_indices_nomapping(slice(0, 15))
     assert (batch[0] == np.arange(15)).all()
     assert (batch[1] == X[:15]).all()
     assert (batch[2] == Y[:15]).all()
