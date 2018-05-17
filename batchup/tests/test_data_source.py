@@ -1606,6 +1606,9 @@ def test_CompositeDataSource_no_trim():
 def test_CompositeDataSource_random_access():
     from batchup import data_source
 
+    # Test the `samples_by_indices` and `samples_by_indices_no_mapping`
+    # methods.
+
     # Test `CompositeDataSource` using an example layout; a generative
     # adversarial network (GAN) for semi-supervised learning
     # We have:
@@ -1831,8 +1834,225 @@ def test_CompositeDataSource_random_access():
     assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
 
 
+def test_CompositeDataSource_random_access_subset():
+    from batchup import data_source
+
+    # Test `CompositeDataSource` using an example layout; a generative
+    # adversarial network (GAN) for semi-supervised learning
+    # We have:
+    # - 15 supervised samples with ground truths; `sup_X`, `sup_y`
+    # - 33 unsupervised samples `unsup_X`
+    sup_X = np.random.normal(size=(15, 10))
+    sup_y = np.random.randint(0, 10, size=(15,))
+    unsup_X = np.random.normal(size=(33, 10))
+
+    #
+    sup_indices = np.random.RandomState(12345).permutation(15)[:10]
+    unsup_indices = np.random.RandomState(23456).permutation(33)[:23]
+
+    # We need a dataset containing the supervised samples
+    sup_ds = data_source.ArrayDataSource([sup_X, sup_y], indices=sup_indices,
+                                         repeats=-1)
+    # We need a dataset containing the unsupervised samples
+    unsup_ds = data_source.ArrayDataSource([unsup_X], indices=unsup_indices)
+
+    # We need to:
+    # - repeatedly iterate over the supervised samples
+    # - iterate over the unsupervised samples for the generator
+    # - iterate over the unsupervised samples again in a different order
+    #   for the discriminator
+    gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ])
+    struct_gan_ds = data_source.CompositeDataSource([
+        sup_ds, unsup_ds, unsup_ds
+    ], flatten=False)
+
+    # Check number of samples
+    assert gan_ds.num_samples() == 23
+
+    def check_structured_batch_layout(batch):
+        # Layout is:
+        # ((sup_x, sup_y), (gen_x,), (disc_x,))
+        assert isinstance(batch, tuple)
+        assert isinstance(batch[0], tuple)
+        assert isinstance(batch[1], tuple)
+        assert isinstance(batch[2], tuple)
+        assert len(batch) == 3
+        assert len(batch[0]) == 2
+        assert len(batch[1]) == 1
+        assert len(batch[2]) == 1
+
+    mapped_ndx_batches = list(gan_ds.batch_indices_iterator(
+        batch_size=10, shuffle=np.random.RandomState(12345)))
+
+    # Get the expected order for the supervised, generator and discriminator
+    # sets
+    # Note: draw in the same order that the data source will
+    order_rng = np.random.RandomState(12345)
+    order_sup = order_rng.permutation(10)
+    order_gen = order_rng.permutation(23)
+    order_dis = order_rng.permutation(23)
+    order_sup = np.append(order_sup, order_rng.permutation(10))
+    order_sup = np.append(order_sup, order_rng.permutation(10))
+    order_gen = np.append(order_gen, order_rng.permutation(23))
+    order_dis = np.append(order_dis, order_rng.permutation(23))
+    # Three batches
+    assert len(mapped_ndx_batches) == 3
+    # Verify index values
+    assert (mapped_ndx_batches[0][0] == sup_indices[order_sup[:10]]).all()
+    assert (mapped_ndx_batches[0][1] == unsup_indices[order_gen[:10]]).all()
+    assert (mapped_ndx_batches[0][2] == unsup_indices[order_dis[:10]]).all()
+
+    assert (mapped_ndx_batches[1][0] == sup_indices[order_sup[10:20]]).all()
+    assert (mapped_ndx_batches[1][1] == unsup_indices[order_gen[10:20]]).all()
+    assert (mapped_ndx_batches[1][2] == unsup_indices[order_dis[10:20]]).all()
+
+    assert (mapped_ndx_batches[2][0] == sup_indices[order_sup[20:23]]).all()
+    assert (mapped_ndx_batches[2][1] == unsup_indices[order_gen[20:23]]).all()
+    assert (mapped_ndx_batches[2][2] == unsup_indices[order_dis[20:23]]).all()
+
+    # Build list of unmapped index batches
+    unmapped_ndx_batches = []
+    for batch_i in range(3):
+        i = batch_i * 10
+        j = min(batch_i * 10 + 10, 23)
+        unmapped_ndx_batches.append((order_sup[i:j], order_gen[i:j],
+                                     order_dis[i:j]))
+
+    # Verify data batches
+    batches = [gan_ds.samples_by_indices(b) for b in unmapped_ndx_batches]
+    # Three batches
+    assert len(batches) == 3
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    # Verify values
+    assert (batches[0][0] == sup_X[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][1] == sup_y[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][2] == unsup_X[unsup_indices[order_gen[:10]]]).all()
+    assert (batches[0][3] == unsup_X[unsup_indices[order_dis[:10]]]).all()
+
+    assert (batches[1][0] == sup_X[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][1] == sup_y[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][2] == unsup_X[unsup_indices[order_gen[10:20]]]).all()
+    assert (batches[1][3] == unsup_X[unsup_indices[order_dis[10:20]]]).all()
+
+    assert (batches[2][0] == sup_X[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][1] == sup_y[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][2] == unsup_X[unsup_indices[order_gen[20:23]]]).all()
+    assert (batches[2][3] == unsup_X[unsup_indices[order_dis[20:23]]]).all()
+
+    # Verify unmapped data batches
+    batches = [gan_ds.samples_by_indices_nomapping(b)
+               for b in mapped_ndx_batches]
+    # Three batches
+    assert len(batches) == 3
+    # Four items in each batch
+    assert len(batches[0]) == 4
+    assert len(batches[1]) == 4
+    assert len(batches[2]) == 4
+    # Verify values
+    assert (batches[0][0] == sup_X[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][1] == sup_y[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][2] == unsup_X[unsup_indices[order_gen[:10]]]).all()
+    assert (batches[0][3] == unsup_X[unsup_indices[order_dis[:10]]]).all()
+
+    assert (batches[1][0] == sup_X[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][1] == sup_y[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][2] == unsup_X[unsup_indices[order_gen[10:20]]]).all()
+    assert (batches[1][3] == unsup_X[unsup_indices[order_dis[10:20]]]).all()
+
+    assert (batches[2][0] == sup_X[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][1] == sup_y[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][2] == unsup_X[unsup_indices[order_gen[20:23]]]).all()
+    assert (batches[2][3] == unsup_X[unsup_indices[order_dis[20:23]]]).all()
+
+    # Check that incorrectly structured index batches raise an error:
+    with pytest.raises(ValueError):
+        gan_ds.samples_by_indices([np.arange(5)])
+
+    with pytest.raises(ValueError):
+        gan_ds.samples_by_indices_nomapping([np.arange(5)])
+
+    # Now disable flattening, resulting in structured batches:
+    mapped_ndx_batches = list(struct_gan_ds.batch_indices_iterator(
+        batch_size=10, shuffle=np.random.RandomState(12345)))
+
+    # Three batches
+    assert len(mapped_ndx_batches) == 3
+    # Verify values
+    assert (mapped_ndx_batches[0][0] == sup_indices[order_sup[:10]]).all()
+    assert (mapped_ndx_batches[0][1] == unsup_indices[order_gen[:10]]).all()
+    assert (mapped_ndx_batches[0][2] == unsup_indices[order_dis[:10]]).all()
+
+    assert (mapped_ndx_batches[1][0] == sup_indices[order_sup[10:20]]).all()
+    assert (mapped_ndx_batches[1][1] == unsup_indices[order_gen[10:20]]).all()
+    assert (mapped_ndx_batches[1][2] == unsup_indices[order_dis[10:20]]).all()
+
+    assert (mapped_ndx_batches[2][0] == sup_indices[order_sup[20:23]]).all()
+    assert (mapped_ndx_batches[2][1] == unsup_indices[order_gen[20:23]]).all()
+    assert (mapped_ndx_batches[2][2] == unsup_indices[order_dis[20:23]]).all()
+
+    # Verify data batches
+    batches = [struct_gan_ds.samples_by_indices(b)
+               for b in unmapped_ndx_batches]
+    # Three batches
+    assert len(batches) == 3
+    # Two items in each batch
+    check_structured_batch_layout(batches[0])
+    check_structured_batch_layout(batches[1])
+    check_structured_batch_layout(batches[2])
+    # Verify values
+    assert (batches[0][0][0] == sup_X[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][0][1] == sup_y[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][1][0] == unsup_X[unsup_indices[order_gen[:10]]]).all()
+    assert (batches[0][2][0] == unsup_X[unsup_indices[order_dis[:10]]]).all()
+
+    assert (batches[1][0][0] == sup_X[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][0][1] == sup_y[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][1][0] == unsup_X[unsup_indices[order_gen[10:20]]]).all()
+    assert (batches[1][2][0] == unsup_X[unsup_indices[order_dis[10:20]]]).all()
+
+    assert (batches[2][0][0] == sup_X[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][0][1] == sup_y[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][1][0] == unsup_X[unsup_indices[order_gen[20:23]]]).all()
+    assert (batches[2][2][0] == unsup_X[unsup_indices[order_dis[20:23]]]).all()
+
+    # Verify data batches
+    batches = [struct_gan_ds.samples_by_indices_nomapping(b)
+               for b in mapped_ndx_batches]
+    # Three batches
+    assert len(batches) == 3
+    # Two items in each batch
+    check_structured_batch_layout(batches[0])
+    check_structured_batch_layout(batches[1])
+    check_structured_batch_layout(batches[2])
+    # Verify values
+    assert (batches[0][0][0] == sup_X[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][0][1] == sup_y[sup_indices[order_sup[:10]]]).all()
+    assert (batches[0][1][0] == unsup_X[unsup_indices[order_gen[:10]]]).all()
+    assert (batches[0][2][0] == unsup_X[unsup_indices[order_dis[:10]]]).all()
+
+    assert (batches[1][0][0] == sup_X[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][0][1] == sup_y[sup_indices[order_sup[10:20]]]).all()
+    assert (batches[1][1][0] == unsup_X[unsup_indices[order_gen[10:20]]]).all()
+    assert (batches[1][2][0] == unsup_X[unsup_indices[order_dis[10:20]]]).all()
+
+    assert (batches[2][0][0] == sup_X[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][0][1] == sup_y[sup_indices[order_sup[20:23]]]).all()
+    assert (batches[2][1][0] == unsup_X[unsup_indices[order_gen[20:23]]]).all()
+    assert (batches[2][2][0] == unsup_X[unsup_indices[order_dis[20:23]]]).all()
+
+
 def test_CompositeDataSource_no_random_access():
     from batchup import data_source
+
+    # Check that a `CompositeDataSource` composed of data sources
+    # that are not random access is not random access itself, and that
+    # invoking methods that require random access data sources raises
+    # `TypeError`
 
     # Test `CompositeDataSource` using an example layout; a generative
     # adversarial network (GAN) for semi-supervised learning

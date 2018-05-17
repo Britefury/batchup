@@ -892,7 +892,7 @@ class CompositeDataSource (AbstractDataSource):
     ... ])
 
     When we iterate over them, we get batches of the form
-    `[[batch_lab_X, batch_lab_y], [batch_unlab_X]]`:
+    `(batch_lab_X, batch_lab_y, batch_unlab_X)`:
     >>> for batch in semi_ds.batch_iterator(batch_size=5):
     ...     # Normally we would pass the batch to a training function, but
     ...     # we're just going to check its shape here:
@@ -908,6 +908,7 @@ class CompositeDataSource (AbstractDataSource):
     ...     lab_ds, unlab_ds
     ... ], flatten=False)
 
+    Batches of the form `((batch_lab_X, batch_lab_y), (batch_unlab_X,))`:
     >>> for batch in semi_flat_ds.batch_iterator(batch_size=5):
     ...     # Check the shape
     ...     assert len(batch) == 2
@@ -1030,7 +1031,7 @@ class CompositeDataSource (AbstractDataSource):
                 'length mis-match: indices has {} items, self has {} data '
                 'sources, should be equal'.format(len(indices),
                                                   len(self.datasets)))
-        batch = tuple([ds.samples_by_indices_nomapping(ndx)
+        batch = tuple([ds.samples_by_indices(ndx)
                        for ds, ndx in zip(self.datasets, indices)])
         return self._prepare_batch(batch)
 
