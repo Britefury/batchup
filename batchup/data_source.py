@@ -1069,6 +1069,268 @@ class CompositeDataSource (AbstractDataSource):
             yield self._prepare_index_batch(batch)
 
 
+class ChoiceDataSource (AbstractDataSource):
+    """A data source that chooses batches from a number of member
+    data sources. Each mini-batch is drawn from one member source.
+
+    Used in cases where mini-batches of samples should be drawn from
+    one of a number of datasets, e.g. where each dataset comes
+    from a different domain.
+
+    Create labeled samples for 3 different domains, each of a different size.
+    Have the underlying `ArrayDataSource` sources repeat infinitely, so we
+    can draw as many samples as necessary
+    >>> a_X = np.random.normal(size=(10, 10))
+    >>> a_y = np.random.randint(0, 10, size=(10,))
+    >>> a_ds = ArrayDataSource([a_X, a_y], repeats=-1)
+
+    >>> b_X = np.random.normal(size=(15, 10))
+    >>> b_y = np.random.randint(0, 10, size=(15,))
+    >>> b_ds = ArrayDataSource([b_X, b_y], repeats=-1)
+
+    >>> c_X = np.random.normal(size=(20, 10))
+    >>> c_y = np.random.randint(0, 10, size=(20,))
+    >>> c_ds = ArrayDataSource([c_X, c_y], repeats=-1)
+
+    Create a data source that iterates repeatedly over the labeled samples
+    and once over the unlabeled samples:
+    >>> ch_ds = ChoiceDataSource([
+    ...     a_ds, b_ds, c_ds
+    ... ])
+
+    When we iterate over them, we get batches of the form
+    `(batch_X, batch_y)`:
+    >>> for batch_X, batch_y in ch_ds.batch_iterator(batch_size=5):
+    ...     # Normally we would pass the batch to a training function, but
+    ...     # we're just going to check its shape here:
+    ...     assert batch_X.shape == (5, 10)
+    ...     assert batch_y.shape == (5,)
+    ...     break
+    """
+    def __init__(self, datasets, stratified=False):
+        self.datasets = datasets
+        self.stratified = stratified
+        self._random_access = True
+        for ds in datasets:
+            if not ds.is_random_access:
+                self._random_access = False
+
+    @property
+    def is_random_access(self):
+        """
+        Determine if this data source is 'random access'.
+        If so, the `samples_by_indices_nomapping` and
+        `batch_indices_iterator` methods will be available
+
+        Returns
+        -------
+        bool
+            `True` if random access
+        """
+        return self._random_access
+
+    def num_samples(self, **kwargs):
+        ns = [d.num_samples(**kwargs) for d in self.datasets]
+        ns = [(n if n is not None else 0) for n in ns]
+        return sum(ns)
+
+    def batch_iterator(self, batch_size, shuffle=None, **kwargs):
+        iterators = [d.batch_iterator(batch_size, shuffle=shuffle, **kwargs)
+                     for d in self.datasets]
+        shuffle_rng = self._get_shuffle_rng(shuffle)
+        for _, x in self._ds_iterator(batch_size, iterators, shuffle_rng,
+                                      **kwargs):
+            yield x
+
+    def samples_by_indices_nomapping(self, indices):
+        """
+        Gather a batch of samples by indices *without* applying any index
+        mapping.
+
+        Parameters
+        ----------
+        indices: a tuple of the form `(dataset_index, sample_indices)`
+            The `dataset_index` identifies the dataset from which to draw
+            samples while `sample_indices` identifies the samples to draw
+            from it.
+
+        Returns
+        -------
+        nested list of arrays
+            A mini-batch
+        """
+        if not self._random_access:
+            raise TypeError('samples_by_indices_nomapping method not '
+                            'supported as one or more of the underlying '
+                            'data sources does not support random access')
+        if not isinstance(indices, tuple):
+            raise TypeError('indices should be a tuple, not a {}'.format(
+                type(indices)
+            ))
+        dataset_index, sample_indices = indices
+        ds = self.datasets[dataset_index]
+        return ds.samples_by_indices_nomapping(sample_indices)
+
+    def samples_by_indices(self, indices):
+        """
+        Gather a batch of samples by indices, applying any index
+        mapping defined by the underlying data sources.
+
+        Parameters
+        ----------
+        indices: a tuple of the form `(dataset_index, sample_indices)`
+            The `dataset_index` identifies the dataset from which to draw
+            samples while `sample_indices` identifies the samples to draw
+            from it.
+
+        Returns
+        -------
+        nested list of arrays
+            A mini-batch
+        """
+        if not self._random_access:
+            raise TypeError('samples_by_indices method not supported as one '
+                            'or more of the underlying data sources does '
+                            'not support random access')
+        if not isinstance(indices, tuple):
+            raise TypeError('indices should be a tuple, not a {}'.format(
+                type(indices)
+            ))
+        dataset_index, sample_indices = indices
+        ds = self.datasets[dataset_index]
+        return ds.samples_by_indices(sample_indices)
+
+    def batch_indices_iterator(self, batch_size, shuffle=None, **kwargs):
+        """
+        Create an iterator that generates mini-batch sample indices
+
+        The generated mini-batches indices take the form of nested lists of
+        either:
+        - 1D NumPy integer arrays
+        - slices
+
+        The list nesting structure with match that of the tree of data sources
+        rooted at `self`
+
+        Parameters
+        ----------
+        batch_size: int
+            Mini-batch size
+        shuffle: `numpy.random.RandomState` or `True` or `None`
+            Used to randomise element order. If `None`, elements will be
+            extracted in order. If it is a `RandomState` instance, that
+            RNG will be used to shuffle elements. If it is `True`, NumPy's
+            default RNG will be used.
+
+        Returns
+        -------
+        iterator
+            An iterator that generates items that are nested lists of slices
+            or 1D NumPy integer arrays.
+        """
+        if not self._random_access:
+            raise TypeError('batch_indices_iterator method not supported as '
+                            'one or more of the underlying data sources '
+                            'does not support random access')
+        shuffle_rng = self._get_shuffle_rng(shuffle)
+        iterators = [d.batch_indices_iterator(batch_size,
+                                              shuffle=shuffle_rng, **kwargs)
+                     for d in self.datasets]
+        return self._ds_iterator(batch_size, iterators, shuffle_rng, **kwargs)
+
+    def _ds_iterator(self, batch_size, iterators, shuffle_rng, **kwargs):
+        # Get number of samples in each dataset
+        ns = [d.num_samples(shuffle=shuffle_rng, **kwargs)
+              for d in self.datasets]
+        # Check if they are all finite
+        all_finite = not (np.array(ns) == np.inf).any()
+        if self.stratified and all_finite:
+            # Stratified and finite
+            nb = [sampling.num_batches(s, batch_size) for s in ns]
+            if shuffle_rng:
+                # Choose from datasets randomly
+                ds_indices = self._ds_indices_stratified_shuffled(
+                    nb, shuffle_rng)
+            else:
+                # Stratified in order
+                # Choose from datasets in an order that will distribute them
+                # evenly throughout the complete iteration
+                ds_indices = self._ds_indices_stratified_in_order(nb)
+            for ds_i in ds_indices:
+                iterator = iterators[ds_i]
+                x = next(iterator)
+                yield (ds_i, x)
+        else:
+            # Not stratified
+            if shuffle_rng is not None:
+                # Shuffled; choose a batch from each dataset in a random
+                # order, cyclically until one of them is exhausted
+                running = True
+                while running:
+                    for ds_i in shuffle_rng.permutation(len(iterators)):
+                        iterator = iterators[ds_i]
+
+                        try:
+                            x = next(iterator)
+                        except StopIteration:
+                            running = False
+                            break
+                        yield (ds_i, x)
+            else:
+                # In order; choose a batch from each dataset in turn,
+                # cyclically until one of them is exhausted
+                running = True
+                while running:
+                    for ds_i, iterator in enumerate(iterators):
+                        try:
+                            x = next(iterator)
+                        except StopIteration:
+                            running = False
+                            break
+                        yield (ds_i, x)
+
+    @staticmethod
+    def _ds_indices_stratified_in_order(batches_per_ds):
+        batches_per_ds = np.array(batches_per_ds)
+        # Get maximum number of batches across datasets
+        max_b = batches_per_ds.max()
+        # Epsilon value to ensure correct rounding
+        eps = 0.25 / max_b
+        # Delta to add on each step
+        deltas = batches_per_ds.astype(float) / max_b
+        # Values initialised to 0; deltas is added to this
+        values = np.zeros_like(deltas)
+        # Result list
+        results = []
+        # Dataset indices
+        indices = np.arange(len(batches_per_ds))
+        # Previously emitted values
+        prev = np.ones(batches_per_ds.shape, dtype=int) * -1
+        for i in range(max_b):
+            # Get index values
+            val_i = np.floor(values + eps).astype(int)
+            # Select those that have stepped over an integer boundary and
+            # add to result
+            results.append(indices[val_i > prev])
+            prev = val_i
+            # Advance values
+            values += deltas
+        return np.concatenate(results, axis=0)
+
+    @staticmethod
+    def _ds_indices_stratified_shuffled(batches_per_ds, shuffle_rng):
+        # Build an array of dataset indices for each batch and shuffle
+        total_b = sum(batches_per_ds)
+        # Result array; one element for each batch
+        result = np.zeros((total_b,), dtype=int)
+        pos = 0
+        for ds_i, b in enumerate(batches_per_ds):
+            result[pos:pos+b] = ds_i
+            pos += b
+        shuffle_rng.shuffle(result)
+        return result
+
+
 class MapDataSource (AbstractDataSource):
     """A data source that applies a function to each mini-batch generated
     by a component data source. Analagous to applying the `map` function.
