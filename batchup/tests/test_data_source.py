@@ -2095,6 +2095,263 @@ def test_CompositeDataSource_no_random_access():
         next(gan_ds.samples_by_indices_nomapping(np.arange(10)))
 
 
+def test_ChoiceDataSource_ds_indices_stratified():
+    from batchup import data_source
+
+    # Test `_ds_indices_stratified_in_order` method
+
+    assert data_source.ChoiceDataSource._ds_indices_stratified_in_order(
+        [8, 4, 2, 1]).tolist() == [0, 1, 2, 3,
+                                   0,
+                                   0, 1,
+                                   0,
+                                   0, 1, 2,
+                                   0,
+                                   0, 1,
+                                   0]
+
+    assert data_source.ChoiceDataSource._ds_indices_stratified_in_order(
+        [7, 3, 1]).tolist() == [0, 1, 2,
+                                0,
+                                0,
+                                0, 1,
+                                0,
+                                0, 1,
+                                0]
+
+    rng = np.random.RandomState(12345)
+
+    for i in range(128):
+        n_batches = rng.randint(1, 16, size=(6,))
+        ds_i = data_source.ChoiceDataSource._ds_indices_stratified_in_order(
+            n_batches)
+        hist = np.bincount(ds_i)
+        assert (hist == n_batches).all()
+
+    # Test `_ds_indices_stratified_shuffled` method
+
+    for i in range(128):
+        n_batches = rng.randint(1, 16, size=(6,))
+        ds_i = data_source.ChoiceDataSource._ds_indices_stratified_shuffled(
+            n_batches, rng)
+        hist = np.bincount(ds_i)
+        assert (hist == n_batches).all()
+
+
+def test_ChoiceDataSource_ds_iterator_not_stratified():
+    from batchup import data_source
+
+    # Test `_ds_iterator` method
+    a_ds = data_source.ArrayDataSource([np.random.normal(size=(40, 3))])
+    b_ds = data_source.ArrayDataSource([np.random.normal(size=(20, 3))])
+    c_ds = data_source.ArrayDataSource([np.random.normal(size=(10, 3))])
+    d_ds = data_source.ArrayDataSource([np.random.normal(size=(5, 3))])
+
+    def make_iters():
+        return [iter(range(8)), iter(range(4)), iter(range(2)),
+                iter(range(1))]
+
+    # Non-stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+
+    # In-order
+    batches = list(ch_ds._ds_iterator(5, make_iters(), None))
+    assert len(batches) == 7
+    assert batches[0] == (0, 0)
+    assert batches[1] == (1, 0)
+    assert batches[2] == (2, 0)
+    assert batches[3] == (3, 0)
+    assert batches[4] == (0, 1)
+    assert batches[5] == (1, 1)
+    assert batches[6] == (2, 1)
+
+    # Shuffled
+    shuffle_rng = np.random.RandomState(12345)
+    order_rng = np.random.RandomState(12345)
+
+    ds_order = np.append(order_rng.permutation(4), order_rng.permutation(4))
+
+    batches = list(ch_ds._ds_iterator(5, make_iters(), shuffle_rng))
+
+    # One one batch can be extracted from d_ds
+    # So one loop round all datasets then a partial loop until we hit d_ds
+    # again
+    # Find the index at which we hit it for a second time
+    stop_at = np.where(ds_order == 3)[0][1]
+    expected_batches = []
+    for j in range(2):
+        for i in range(4):
+            expected_batches.append((ds_order[j*4+i], j))
+
+    assert batches == expected_batches[:stop_at]
+
+
+def test_ChoiceDataSource_ds_iterator_stratified():
+    from batchup import data_source
+
+    # Test `_ds_iterator` method
+    a_ds = data_source.ArrayDataSource([np.random.normal(size=(40, 3))])
+    b_ds = data_source.ArrayDataSource([np.random.normal(size=(20, 3))])
+    c_ds = data_source.ArrayDataSource([np.random.normal(size=(10, 3))])
+    d_ds = data_source.ArrayDataSource([np.random.normal(size=(5, 3))])
+
+    def make_iters():
+        return [iter(range(8)), iter(range(4)), iter(range(2)),
+                iter(range(1))]
+
+    # Non-stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds],
+                                         stratified=True)
+
+    # In-order
+    batches = list(ch_ds._ds_iterator(5, make_iters(), None))
+    assert batches == [(0, 0), (1, 0), (2, 0), (3, 0),
+                       (0, 1),
+                       (0, 2), (1, 1),
+                       (0, 3),
+                       (0, 4), (1, 2), (2, 1),
+                       (0, 5),
+                       (0, 6), (1, 3),
+                       (0, 7)]
+
+    # Shuffled
+    shuffle_rng = np.random.RandomState(12345)
+    batches = list(ch_ds._ds_iterator(5, make_iters(), shuffle_rng))
+    # Convert to list of lists
+    arr_batches = np.array([list(x) for x in batches])
+    for i in range(len(arr_batches)):
+        hist = np.bincount(arr_batches[:i+1, 0], minlength=4)
+        assert hist[arr_batches[i, 0]] == arr_batches[i, 1] + 1
+
+
+def test_ChoiceDataSource_batch_iterator():
+    from batchup import data_source
+
+    a_X = np.arange(120).reshape((40, 3))
+    b_X = np.arange(60).reshape((20, 3)) * 1000
+    c_X = np.arange(30).reshape((10, 3)) * 100000
+    d_X = np.arange(15).reshape((5, 3)) * 10000000
+    a_ds = data_source.ArrayDataSource([a_X])
+    b_ds = data_source.ArrayDataSource([b_X])
+    c_ds = data_source.ArrayDataSource([c_X])
+    d_ds = data_source.ArrayDataSource([d_X])
+
+    # Not-stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+
+    # In order batches
+    batches = list(ch_ds.batch_iterator(5))
+    assert len(batches) == 7
+
+    assert (batches[0][0] == a_X[:5]).all()
+    assert (batches[1][0] == b_X[:5]).all()
+    assert (batches[2][0] == c_X[:5]).all()
+    assert (batches[3][0] == d_X[:5]).all()
+    assert (batches[4][0] == a_X[5:10]).all()
+    assert (batches[5][0] == b_X[5:10]).all()
+    assert (batches[6][0] == c_X[5:10]).all()
+
+    # Stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds],
+                                         stratified=True)
+
+    # In order batches
+    batches = list(ch_ds.batch_iterator(5))
+    assert len(batches) == 15
+
+    assert (batches[0][0] == a_X[:5]).all()
+    assert (batches[1][0] == b_X[:5]).all()
+    assert (batches[2][0] == c_X[:5]).all()
+    assert (batches[3][0] == d_X[:5]).all()
+    assert (batches[4][0] == a_X[5:10]).all()
+    assert (batches[5][0] == a_X[10:15]).all()
+    assert (batches[6][0] == b_X[5:10]).all()
+    assert (batches[7][0] == a_X[15:20]).all()
+    assert (batches[8][0] == a_X[20:25]).all()
+    assert (batches[9][0] == b_X[10:15]).all()
+    assert (batches[10][0] == c_X[5:10]).all()
+    assert (batches[11][0] == a_X[25:30]).all()
+    assert (batches[12][0] == a_X[30:35]).all()
+    assert (batches[13][0] == b_X[15:20]).all()
+    assert (batches[14][0] == a_X[35:40]).all()
+
+
+def test_ChoiceDataSource_batch_indices_iterator():
+    from batchup import data_source
+
+    a_X = np.arange(120).reshape((40, 3))
+    b_X = np.arange(60).reshape((20, 3)) * 1000
+    c_X = np.arange(30).reshape((10, 3)) * 100000
+    d_X = np.arange(15).reshape((5, 3)) * 10000000
+    a_ds = data_source.ArrayDataSource([a_X])
+    b_ds = data_source.ArrayDataSource([b_X])
+    c_ds = data_source.ArrayDataSource([c_X])
+    d_ds = data_source.ArrayDataSource([d_X])
+
+    # Not-stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+
+    # In order batches
+    batches = list(ch_ds.batch_indices_iterator(5))
+    assert len(batches) == 7
+
+    print(batches[0])
+
+    assert batches[0][0] == 0
+    assert batches[1][0] == 1
+    assert batches[2][0] == 2
+    assert batches[3][0] == 3
+    assert batches[4][0] == 0
+    assert batches[5][0] == 1
+    assert batches[6][0] == 2
+    assert (batches[0][1] == np.arange(5)).all()
+    assert (batches[1][1] == np.arange(5)).all()
+    assert (batches[2][1] == np.arange(5)).all()
+    assert (batches[3][1] == np.arange(5)).all()
+    assert (batches[4][1] == np.arange(5, 10)).all()
+    assert (batches[5][1] == np.arange(5, 10)).all()
+    assert (batches[6][1] == np.arange(5, 10)).all()
+
+    # Stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds],
+                                         stratified=True)
+
+    # In order batches
+    batches = list(ch_ds.batch_indices_iterator(5))
+    assert len(batches) == 15
+
+    assert batches[0][0] == 0
+    assert batches[1][0] == 1
+    assert batches[2][0] == 2
+    assert batches[3][0] == 3
+    assert batches[4][0] == 0
+    assert batches[5][0] == 0
+    assert batches[6][0] == 1
+    assert batches[7][0] == 0
+    assert batches[8][0] == 0
+    assert batches[9][0] == 1
+    assert batches[10][0] == 2
+    assert batches[11][0] == 0
+    assert batches[12][0] == 0
+    assert batches[13][0] == 1
+    assert batches[14][0] == 0
+    assert (batches[0][1] == np.arange(5)).all()
+    assert (batches[1][1] == np.arange(5)).all()
+    assert (batches[2][1] == np.arange(5)).all()
+    assert (batches[3][1] == np.arange(5)).all()
+    assert (batches[4][1] == np.arange(5, 10)).all()
+    assert (batches[5][1] == np.arange(10, 15)).all()
+    assert (batches[6][1] == np.arange(5, 10)).all()
+    assert (batches[7][1] == np.arange(15, 20)).all()
+    assert (batches[8][1] == np.arange(20, 25)).all()
+    assert (batches[9][1] == np.arange(10, 15)).all()
+    assert (batches[10][1] == np.arange(5, 10)).all()
+    assert (batches[11][1] == np.arange(25, 30)).all()
+    assert (batches[12][1] == np.arange(30, 35)).all()
+    assert (batches[13][1] == np.arange(15, 20)).all()
+    assert (batches[14][1] == np.arange(35, 40)).all()
+
+
 def test_MapDataSource():
     from batchup import data_source
 
