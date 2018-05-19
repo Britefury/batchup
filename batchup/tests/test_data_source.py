@@ -3,12 +3,12 @@ import numpy as np
 
 
 # Helper function to test the callable protocol
-def make_batch_iterator_callable(X, Y):
+def make_batch_iterator_callable(*ds):
     from batchup import data_source
 
     def batch_iterator(batch_size, shuffle=None):
         # Make `data_source.ArrayDataSource.batch_iterator` do the work :)
-        return data_source.ArrayDataSource([X, Y]).batch_iterator(
+        return data_source.ArrayDataSource(list(ds)).batch_iterator(
             batch_size, shuffle=shuffle)
     return batch_iterator
 
@@ -2095,6 +2095,45 @@ def test_CompositeDataSource_no_random_access():
         next(gan_ds.samples_by_indices_nomapping(np.arange(10)))
 
 
+def test_ChoiceDataSource():
+    from batchup import data_source
+
+    a_X = np.random.normal(size=(40, 3))
+    b_X = np.random.normal(size=(20, 3))
+    c_X = np.random.normal(size=(10, 3))
+    d_X = np.random.normal(size=(5, 3))
+    a_ds = data_source.ArrayDataSource([a_X])
+    b_ds = data_source.ArrayDataSource([b_X])
+    c_ds = data_source.ArrayDataSource([c_X])
+    d_ds = data_source.ArrayDataSource([d_X])
+
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+
+    assert ch_ds.is_random_access
+    assert ch_ds.num_samples() == 75
+
+    a_call_it = make_batch_iterator_callable(a_X)
+    b_call_it = make_batch_iterator_callable(b_X)
+
+    a_call = data_source.CallableDataSource(a_call_it)
+    b_call = data_source.CallableDataSource(b_call_it)
+
+    ch_call_ds = data_source.ChoiceDataSource([a_call, b_call, c_ds, d_ds])
+
+    assert not ch_call_ds.is_random_access
+    assert ch_call_ds.num_samples() == 15
+
+    # Methods that require random access should not work
+    with pytest.raises(TypeError):
+        ch_call_ds.samples_by_indices((0, np.arange(5)))
+
+    with pytest.raises(TypeError):
+        ch_call_ds.samples_by_indices_nomapping((0, np.arange(5)))
+
+    with pytest.raises(TypeError):
+        ch_call_ds.batch_indices_iterator(batch_size=5, shuffle=True)
+
+
 def test_ChoiceDataSource_ds_indices_stratified():
     from batchup import data_source
 
@@ -2350,6 +2389,81 @@ def test_ChoiceDataSource_batch_indices_iterator():
     assert (batches[12][1] == np.arange(30, 35)).all()
     assert (batches[13][1] == np.arange(15, 20)).all()
     assert (batches[14][1] == np.arange(35, 40)).all()
+
+
+def test_ChoiceDataSource_samples_by_indices_no_mapping():
+    from batchup import data_source
+
+    a_X = np.random.normal(size=(40, 3))
+    b_X = np.random.normal(size=(20, 3))
+    c_X = np.random.normal(size=(10, 3))
+    d_X = np.random.normal(size=(5, 3))
+    a_ds = data_source.ArrayDataSource([a_X])
+    b_ds = data_source.ArrayDataSource([b_X])
+    c_ds = data_source.ArrayDataSource([c_X])
+    d_ds = data_source.ArrayDataSource([d_X])
+
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+
+    assert (ch_ds.samples_by_indices_nomapping((0, np.arange(5))) ==
+            a_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping((1, np.arange(5))) ==
+            b_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping((2, np.arange(5))) ==
+            c_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping((3, np.arange(5))) ==
+            d_X[:5]).all()
+
+    # Should only accept tuple
+    with pytest.raises(TypeError):
+        ch_ds.samples_by_indices_nomapping(np.arange(5))
+
+    with pytest.raises(TypeError):
+        ch_ds.samples_by_indices_nomapping([0, np.arange(5)])
+
+
+def test_ChoiceDataSource_samples_by_indices():
+    from batchup import data_source
+
+    a_X = np.random.normal(size=(120, 3))
+    b_X = np.random.normal(size=(120, 3))
+    c_X = np.random.normal(size=(120, 3))
+    d_X = np.random.normal(size=(120, 3))
+    a_inds = np.random.permutation(120)[:40]
+    b_inds = np.random.permutation(120)[:20]
+    c_inds = np.random.permutation(120)[:10]
+    d_inds = np.random.permutation(120)[:5]
+    a_ds = data_source.ArrayDataSource([a_X], indices=a_inds)
+    b_ds = data_source.ArrayDataSource([b_X], indices=b_inds)
+    c_ds = data_source.ArrayDataSource([c_X], indices=c_inds)
+    d_ds = data_source.ArrayDataSource([d_X], indices=d_inds)
+
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+
+    assert (ch_ds.samples_by_indices_nomapping((0, np.arange(5))) ==
+            a_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping((1, np.arange(5))) ==
+            b_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping((2, np.arange(5))) ==
+            c_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping((3, np.arange(5))) ==
+            d_X[:5]).all()
+
+    assert (ch_ds.samples_by_indices((0, np.arange(5))) ==
+            a_X[a_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices((1, np.arange(5))) ==
+            b_X[b_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices((2, np.arange(5))) ==
+            c_X[c_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices((3, np.arange(5))) ==
+            d_X[d_inds[:5]]).all()
+
+    # Should only accept tuple
+    with pytest.raises(TypeError):
+        ch_ds.samples_by_indices(np.arange(5))
+
+    with pytest.raises(TypeError):
+        ch_ds.samples_by_indices([0, np.arange(5)])
 
 
 def test_MapDataSource():

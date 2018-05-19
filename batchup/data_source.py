@@ -1130,7 +1130,9 @@ class ChoiceDataSource (AbstractDataSource):
         return self._random_access
 
     def num_samples(self, **kwargs):
-        return sum([d.num_samples(**kwargs) for d in self.datasets])
+        ns = [d.num_samples(**kwargs) for d in self.datasets]
+        ns = [(n if n is not None else 0) for n in ns]
+        return sum(ns)
 
     def batch_iterator(self, batch_size, shuffle=None, **kwargs):
         iterators = [d.batch_iterator(batch_size, shuffle=shuffle, **kwargs)
