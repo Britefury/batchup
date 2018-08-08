@@ -178,7 +178,8 @@ class AbstractDataSource (object):
         if n_batches is None:
             n = self.num_samples(**kwargs)
             if n == np.inf:
-                raise ValueError('Data set has infinite size but no n_batches '
+                raise ValueError('Data set has infinite size or sampler will '
+                                 'generate infinite samples but no n_batches '
                                  'limit specified')
             elif n is not None:
                 n_batches = sampling.num_batches(n, batch_size)
@@ -292,7 +293,8 @@ class AbstractDataSource (object):
         if n_batches is None:
             n = self.num_samples(**kwargs)
             if n == np.inf:
-                raise ValueError('Data set has infinite size but no n_batches '
+                raise ValueError('Data set has infinite size or sampler will '
+                                 'generate infinite samples but no n_batches '
                                  'limit specified')
             elif n is not None:
                 n_batches = sampling.num_batches(n, batch_size)
