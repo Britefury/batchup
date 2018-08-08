@@ -84,7 +84,7 @@ def fetch_stl(source_paths, target_path):
     unl_X_u8_arr.append(unl_X_u8)
 
     print('Converting STL class names to HDF5')
-    class_names = [n.strip()
+    class_names = [n.strip().encode('us-ascii')
                    for n in open(class_names_pth, 'r').readlines()]
     f_out.create_array(g_out, 'class_names', class_names)
 

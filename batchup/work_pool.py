@@ -5,7 +5,12 @@ from multiprocessing.pool import ThreadPool
 import multiprocessing.managers
 from six.moves.cPickle import loads, dumps
 
-import joblib
+try:
+    # joblib 0.12.x
+    from joblib.pool import MemmappingPool as MemmappingPool
+except ImportError:
+    # joblib 0.11.x
+    from joblib.pool import MemmapingPool as MemmappingPool
 
 from . import data_source
 
@@ -275,7 +280,7 @@ class WorkerProcessPool(AbstractWorkerPool):
         self.__manager = multiprocessing.managers.SyncManager()
         self.__manager.start()
         self.__shared_objects = self.__manager.dict({})
-        self.__pool = joblib.pool.MemmapingPool(processes=processes)
+        self.__pool = MemmappingPool(processes=processes)
 
     def shared_constant(self, x):
         """
