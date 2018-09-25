@@ -11,6 +11,7 @@ else:
 
 _CONFIG_PATH = os.path.expanduser(os.path.join('~', '.batchup.cfg'))
 _DEFAULT_BATCHUP_PATH = os.path.expanduser(os.path.join('~', '.batchup'))
+_BATCHUP_ENV_NAME = 'BATCHUP_HOME'
 _DATA_DIR_NAME = 'data'
 _MAX_DOWNLOAD_TRIES = 3
 
@@ -40,7 +41,8 @@ def get_batchup_path():  # pragma: no cover
         try:
             _data_dir_path__ = get_config().get('paths', 'data_dir')
         except:
-            _data_dir_path__ = _DEFAULT_BATCHUP_PATH
+            _data_dir_path__ = os.environ.get(_BATCHUP_ENV_NAME,
+                                              _DEFAULT_BATCHUP_PATH)
         if os.path.exists(_data_dir_path__):
             if not os.path.isdir(_data_dir_path__):
                 raise RuntimeError(
