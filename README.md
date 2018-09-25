@@ -1,6 +1,19 @@
 # BatchUp
 Python library for extracting mini-batches of data from a data source for the purpose of training neural networks.
 
+Quick example:
+
+```py3
+from batchup import data_source
+
+# Construct an array data source
+ds = data_source.ArrayDataSource([train_X, train_y])
+
+# Iterate over samples, drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=True):
+    # Processes batches here...
+```
+
 
 # Table of Contents
 
@@ -31,6 +44,8 @@ BatchUp supports some standard machine learning datasets. They will be automatic
 
 #### Configuring BatchUp
 Data paths, etc.
+
+More details further down, but briefly, use either the `~/.batchup.cfg` configuration file or the `BATCHUP_HOME` environment varible.
 
 
 ## Installation
@@ -470,3 +485,5 @@ By default BatchUp will store its data (e.g. downloaded datasets) in a directory
 [paths]
 data_dir=/some/path/batchup_data
 ```
+
+Alternatively you can set the `BATCHUP_HOME` environment variable top the BatchUp data directory.
