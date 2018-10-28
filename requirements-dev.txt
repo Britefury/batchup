@@ -4,3 +4,4 @@ scipy
 joblib
 pytest
 six
+coverage>=4.4
