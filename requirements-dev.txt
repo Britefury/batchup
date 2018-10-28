@@ -4,4 +4,4 @@ scipy
 joblib
 pytest
 six
-coverage>=4.4
+pytest-cov>=2.4.0,<2.6
