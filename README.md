@@ -23,6 +23,7 @@ for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=True):
 Processing data in mini-batches:
 - quick batch iteration; a basic example
 - iterating over subsets identified by indices
+- data augmentation
 - including sample indices in the mini-batches
 - infinite batch iteration; an iterator that generates batches endlessly
 - sample weighting to alter likelihood of samples (e.g. to compensate for class imbalance)
@@ -92,6 +93,39 @@ ds = data_source.ArrayDataSource([train_X, train_y], indices=subset_a)
 for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
     # Processes batches here...
 ```
+
+### Data augmentation
+
+We can define a function that applies data augmentation on the fly. Let's assume that `train_X` contains image data,
+has the shape `(sample, channel, height, width)` and that we wish to horizontally flip some of the images:
+
+```py3
+import numpy as np
+
+# Define our batch augmentation function.
+def augment_batch(batch_X, batch_y):
+    # Create an array that selects samples with 50% probability and convert to `bool` dtype
+    flip_flags = np.random.binomial(1, 0.5, size=(len(batch_X),)) != 0
+    
+    # Flip the width dimension in selected samples
+    batch_X[flip_flags, ...] = flip_flags[flip_flags, :, :, ::-1]
+    
+    # Return the batch as a tuple
+    return batch_X, batch_y
+    
+# Construct an array data source that will only draw samples whose indices are in `subset_a`
+ds = data_source.ArrayDataSource([train_X, train_y])
+
+# Apply augmentation
+ds = ds.map(augment_batch)
+
+# Drawing batches of 64 elements in random order
+for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
+    # Processes batches here...
+```
+
+More complex augmentation may incurr significant runtime cost. This can be alleviated by preparing batches
+in background threads. See the *parallel processing* section below.
 
 ### Including sample indices in the mini-batches
 
