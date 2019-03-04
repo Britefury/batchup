@@ -556,7 +556,7 @@ class WeightedSampler (AbstractSampler):
                                      p=self.weights)
 
     @staticmethod
-    def class_balancing_sample_weights(y, n_classes=None):
+    def class_balancing_sample_weights(y):
         """
         Compute sample weight given an array of sample classes. The weights
         are assigned on a per-class basis and the per-class weights are
@@ -565,43 +565,35 @@ class WeightedSampler (AbstractSampler):
         Parameters
         ----------
         y: NumPy array, 1D dtype=int
-            sample classes
-        n_classes: int, default=None
-            number of classes. If 0, it will be assumed to be `y.max()+ 1`
+            sample classes, values must be 0 or positive
 
         Returns
         -------
         NumPy array, 1D dtype=float
             per sample weight array
         """
-        if n_classes is not None:
-            h = np.bincount(y, minlength=n_classes)
-        else:
-            h = np.bincount(y)
-        cls_weight = 1.0 / (h.astype(float) * len(h))
+        h = np.bincount(y)
+        cls_weight = 1.0 / (h.astype(float) * len(np.nonzero(h)[0]))
         cls_weight[np.isnan(cls_weight)] = 0.0
         sample_weight = cls_weight[y]
         return sample_weight
 
     @staticmethod
-    def class_balancing_sampler(y, n_classes=None):
+    def class_balancing_sampler(y):
         """
         Construct a `WeightedSampler` that compensates for class imbalance.
 
         Parameters
         ----------
         y: NumPy array, 1D dtype=int
-            sample classes
-        n_classes: int, default=0
-            number of classes. If 0, it will be assumed to be `y.max()+ 1`
+            sample classes, values must be 0 or positive
 
         Returns
         -------
         WeightedSampler instance
             Sampler
         """
-        weights = WeightedSampler.class_balancing_sample_weights(
-            y, n_classes)
+        weights = WeightedSampler.class_balancing_sample_weights(y)
         return WeightedSampler(weights)
 
 
@@ -719,26 +711,23 @@ class WeightedSubsetSampler (AbstractSampler):
                                      p=self.sub_weights)
 
     @staticmethod
-    def class_balancing_sampler(y, indices, n_classes=None):
+    def class_balancing_sampler(y, indices):
         """
         Construct a `WeightedSubsetSampler` that compensates for class
         imbalance.
 
         Parameters
         ----------
+        y: NumPy array, 1D dtype=int
+            sample classes, values must be 0 or positive
         indices: NumPy array, 1D dtype=int
             An array of indices that identify the subset of samples drawn
             from data that are to be used
-        y: NumPy array, 1D dtype=int
-            sample classes
-        n_classes: int, default=0
-            number of classes. If 0, it will be assumed to be `y.max()+ 1`
 
         Returns
         -------
         WeightedSubsetSampler instance
             Sampler
         """
-        weights = WeightedSampler.class_balancing_sample_weights(
-            y[indices], n_classes)
+        weights = WeightedSampler.class_balancing_sample_weights(y[indices])
         return WeightedSubsetSampler(weights, indices=indices)
