@@ -379,12 +379,20 @@ def test_WeightedSampler():
     with pytest.raises(ValueError):
         _ = sampling.WeightedSampler(weights=np.zeros((3,)))
 
-    # Test class balancing helpers
+    # Test class balancing sample weight generation
     # Ground truths
     y = np.array([0, 0, 1, 1, 1, 2, 2, 2, 2, 2])
     weights = sampling.WeightedSampler.class_balancing_sample_weights(y)
     expected_weights = np.array([1.0/6.0]*2 + [1.0/9.0]*3 + [1.0/15.0]*5)
     assert (weights == expected_weights).all()
+
+    # Ground truths with holes
+    y_holes = np.array([1, 1, 3, 3, 3, 5, 5, 5, 5, 5])
+    weights_holes = sampling.WeightedSampler.class_balancing_sample_weights(
+        y_holes)
+    expected_weights_holes = np.array([1.0/6.0]*2 + [1.0/9.0]*3 +
+                                      [1.0/15.0]*5)
+    assert (weights_holes == expected_weights).all()
 
     # Test class balancing constructor
     cls_bal_spl = sampling.WeightedSampler.class_balancing_sampler(y)
@@ -447,15 +455,10 @@ def test_WeightedSubsetSampler():
     # Ground truths
     y = np.array([0, 0, 1, 1, 1, 2, 2, 2, 2, 2])
     indices = np.array([0, 2, 3, 5, 6, 7])
-    weights = sampling.WeightedSampler.class_balancing_sample_weights(y)
-    sub_weights = weights[indices]
-    sub_weights = sub_weights / sub_weights.sum()
-    print(sub_weights)
-    expected_weights = np.array([1.0/3.0]*1 + [1.0/6.0]*2 + [1.0/9.0]*3)
-    print(sub_weights.sum(), expected_weights.sum())
 
     cls_bal_spl = sampling.WeightedSubsetSampler.class_balancing_sampler(
         y, indices)
+    expected_weights = np.array([1.0/3.0]*1 + [1.0/6.0]*2 + [1.0/9.0]*3)
 
     assert (expected_weights == cls_bal_spl.sub_weights).all()
 
