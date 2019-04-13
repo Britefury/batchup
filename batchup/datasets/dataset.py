@@ -16,6 +16,7 @@ source and output files.
 """
 import os
 import six
+import sys
 from .. import config
 
 
@@ -27,6 +28,14 @@ def path_string(p):
     else:
         raise TypeError('A path should either be a string or a callable, '
                         'not a {}'.format(type(p)))
+
+
+def classnames_from_h5(class_names):
+    class_names = list(class_names)
+    if sys.version_info[0] == 3:
+        # Decode from latin1
+        class_names = [name.decode('latin1') for name in class_names]
+    return class_names
 
 
 class AbstractSourceFile (object):

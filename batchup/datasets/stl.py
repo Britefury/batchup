@@ -1,4 +1,5 @@
 import os
+import six
 import shutil
 import tarfile
 import numpy as np
@@ -138,8 +139,8 @@ class STL (object):
                 self.train_y = train_y[train_indices]
                 self.val_y = train_y[val_indices]
 
-            self.class_names = list(f.root.stl.class_names)
-
+            self.class_names = dataset.classnames_from_h5(
+                f.root.stl.class_names)
         else:
             raise RuntimeError('Could not load MNIST dataset')
 

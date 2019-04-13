@@ -1248,6 +1248,99 @@ def test_CompositeDataSource():
     assert (batches[3][2][0] == unsup_X[order_dis[30:33]]).all()
 
 
+def test_CompositeDataSource_flatten():
+    from batchup import data_source
+
+    # Verify the behaviour of batch flattening with nested
+    # `CompositeDataSource` instances
+
+    # Our data
+    a_X = np.random.normal(size=(15, 10))
+    a_y = np.random.randint(0, 10, size=(15,))
+    b_X = np.random.normal(size=(33, 10))
+
+    # Data sources with supervised and unsupervised samples
+    a_ds = data_source.ArrayDataSource([a_X, a_y], repeats=-1)
+    b_ds = data_source.ArrayDataSource([b_X])
+
+    batch_size = 5
+
+    # Flattened composite data source mixing 'a' and 'b'
+    ab_ds_flat = data_source.CompositeDataSource([a_ds, b_ds])
+    ab_ds_struct = data_source.CompositeDataSource([a_ds, b_ds],
+                                                   flatten=False)
+
+    abab_flat = data_source.CompositeDataSource([ab_ds_flat, ab_ds_struct])
+    abab_struct = data_source.CompositeDataSource([ab_ds_flat, ab_ds_struct],
+                                                  flatten=False)
+
+    # Check structure of ab_ds_flat
+    def check_structure_ab_ds_flat(batch):
+        # ab_ds_flat layout is:
+        # (a_x, a_y, b_x)
+        assert isinstance(batch, tuple)
+        assert len(batch) == 3
+        assert (batch[0] == a_X[:5]).all()
+        assert (batch[1] == a_y[:5]).all()
+        assert (batch[2] == b_X[:5]).all()
+
+    check_structure_ab_ds_flat(next(
+        ab_ds_flat.batch_iterator(batch_size, shuffle=False)))
+
+    # Check structure of ab_ds_struct
+    def check_structure_ab_ds_struct(batch):
+        # ab_ds_struct layout is:
+        # ((a_x, a_y), (b_x,))
+        assert isinstance(batch, tuple)
+        assert len(batch) == 2
+        assert isinstance(batch[0], tuple)
+        assert isinstance(batch[1], tuple)
+        assert (batch[0][0] == a_X[:5]).all()
+        assert (batch[0][1] == a_y[:5]).all()
+        assert (batch[1][0] == b_X[:5]).all()
+
+    check_structure_ab_ds_struct(next(
+        ab_ds_struct.batch_iterator(batch_size, shuffle=False)))
+
+    # Check structure of abab_flat
+    def check_structure_abab_flat(batch):
+        # abab_flat layout is:
+        # (a_x, a_y, b_x, (a_x, a_y), (b_x,))
+        assert isinstance(batch, tuple)
+        assert len(batch) == 5
+        assert isinstance(batch[3], tuple)
+        assert isinstance(batch[4], tuple)
+        assert (batch[0] == a_X[:5]).all()
+        assert (batch[1] == a_y[:5]).all()
+        assert (batch[2] == b_X[:5]).all()
+        assert (batch[3][0] == a_X[:5]).all()
+        assert (batch[3][1] == a_y[:5]).all()
+        assert (batch[4][0] == b_X[:5]).all()
+
+    check_structure_abab_flat(next(
+        abab_flat.batch_iterator(batch_size, shuffle=False)))
+
+    # Check structure of abab_struct
+    def check_structure_abab_struct(batch):
+        # abab_flat layout is:
+        # ((a_x, a_y, b_x), ((a_x, a_y), (b_x,)))
+        assert isinstance(batch, tuple)
+        assert len(batch) == 2
+        assert isinstance(batch[0], tuple)
+        assert isinstance(batch[1], tuple)
+        assert isinstance(batch[1][0], tuple)
+        assert isinstance(batch[1][1], tuple)
+        assert (batch[0][0] == a_X[:5]).all()
+        assert (batch[0][1] == a_y[:5]).all()
+        assert (batch[0][2] == b_X[:5]).all()
+        assert (batch[1][0][0] == a_X[:5]).all()
+        assert (batch[1][0][1] == a_y[:5]).all()
+        assert (batch[1][1][0] == b_X[:5]).all()
+
+    check_structure_abab_struct(next(
+        abab_struct.batch_iterator(batch_size, shuffle=False)))
+
+
 def test_CompositeDataSource_in_order():
     from batchup import data_source
 
