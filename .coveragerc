@@ -2,6 +2,7 @@
 omit =
     batchup/tests/*
     batchup/datasets/cifar10.py
+    batchup/datasets/cifar100.py
     batchup/datasets/fashion_mnist.py
     batchup/datasets/mnist.py
     batchup/datasets/stl.py

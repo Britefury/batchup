@@ -26,9 +26,9 @@ def test_val_0():
     assert ds.test_y.shape == (8000,)
     assert ds.test_y.dtype == np.int32
 
-    assert ds.class_names == [b'airplane', b'bird', b'car', b'cat',
-                              b'deer', b'dog', b'horse', b'monkey', b'ship',
-                              b'truck']
+    assert ds.class_names == ['airplane', 'bird', 'car', 'cat',
+                              'deer', 'dog', 'horse', 'monkey', 'ship',
+                              'truck']
 
 
 @pytest.mark.bigdataset
@@ -55,9 +55,9 @@ def test_val_1fold():
     assert ds.test_y.shape == (8000,)
     assert ds.test_y.dtype == np.int32
 
-    assert ds.class_names == [b'airplane', b'bird', b'car', b'cat',
-                              b'deer', b'dog', b'horse', b'monkey', b'ship',
-                              b'truck']
+    assert ds.class_names == ['airplane', 'bird', 'car', 'cat',
+                              'deer', 'dog', 'horse', 'monkey', 'ship',
+                              'truck']
 
 
 @pytest.mark.bigdataset

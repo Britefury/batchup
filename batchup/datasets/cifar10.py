@@ -45,7 +45,7 @@ def fetch_cifar10(source_paths, target_path):
 
     # Create HDF5 output file
     f_out = tables.open_file(target_path, mode='w')
-    g_out = f_out.create_group(f_out.root, 'cifar10', 'MNIST data')
+    g_out = f_out.create_group(f_out.root, 'cifar10', 'CIFAR-10 data')
 
     print('Converting CIFAR-10 training set to HDF5')
     train_X_u8 = []

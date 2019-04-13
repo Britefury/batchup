@@ -40,6 +40,7 @@ BatchUp supports some standard machine learning datasets. They will be automatic
 - MNIST
 - SVHN
 - CIFAR-10
+- CIFAR-100
 - STL
 - USPS
 
@@ -466,6 +467,31 @@ ds = cifar10.CIFAR10(n_val=5000)
 - `ds.test_X` and `ds.test_y` contain the test samples
 - `ds.class_names` lists the class names of the corresponding ground truth
     indices
+
+
+#### CIFAR-100 dataset
+
+Load the CIFAR-100 dataset:
+```py3
+from batchup.datasets import cifar100
+
+# Load CIFAR-100 dataset (downloading it if necessary) and retain the last 5000
+# training samples for validation
+ds = cifar100.CIFAR100(n_val=5000)
+```
+
+- `ds.train_X` is a `(n, 3, 32, 32)` `float32` array that contains the
+    training images.
+- `ds.train_y` is a `(n,)` `int32` array that contains the fine ground
+    truth classes.
+- `ds.train_y_coarse` is a `(n,)` `int32` array that contains the coarse
+    ground truth classes.
+- `ds.val_X`, `ds.val_y` and `ds.val_y_coarse` contain the validation samples
+- `ds.test_X`, `ds.test_y` and `ds.test_y_coarse` contain the test samples
+- `ds.class_names` lists the class names of the corresponding fine ground
+    truth indices
+- `ds.class_names_coarse` lists the class names of the corresponding coarse
+    ground truth indices
 
 
 #### STL dataset
