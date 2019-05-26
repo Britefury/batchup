@@ -165,7 +165,9 @@ in `train_w`.
 from batchup import sampling
 
 sampler = sampling.WeightedSampler(weights=train_w)
+
 ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+
 # Drawing batches of 64 elements in random order
 for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
     # Processes batches here...
@@ -182,7 +184,9 @@ from batchup import sampling
 # NOTE that that parameter is called `sub_weights` (rather than `weights`) and that it must have the
 # same length as `indices`.
 sampler = sampling.WeightedSubsetSampler(sub_weights=train_w[subset_a], indices=subset_a)
+
 ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+
 # Drawing batches of 64 elements in random order
 for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
     # Processes batches here...
@@ -196,18 +200,26 @@ An alternate constructor `sampling.WeightedSampler.class_balancing_sampler` is a
 ```py3
 # Construct the sampler; NOTE that the `n_classes` argument is *optional*
 sampler = sampling.WeightedSampler.class_balancing_sampler(y=train_y, n_classes=train_y.max() + 1)
+
 ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+
 # Drawing batches of 64 elements in random order
 for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
     # Processes batches here...
 ```
 
-The `sampling.WeightedSampler.class_balancing_sample_weights` constructs an array of sample weights for you,
+The `sampling.WeightedSampler.class_balancing_sample_weights` helper method constructs an array of sample weights,
 in case you wish to modify the weights first:
 ```py3
 weights = sampling.WeightedSampler.class_balancing_sample_weights(y=train_y, n_classes=train_y.max() + 1)
+
 # Assume `modify_weights` is defined above
 weights = modify_weights(weights)
+
+# Construct the sampler and the data source
+sampler = sampling.WeightedSampler(weights=weights)
+ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
+
 # Drawing batches of 64 elements in random order
 for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=np.random.RandomState(12345)):
     # Processes batches here...
