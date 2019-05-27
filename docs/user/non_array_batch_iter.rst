@@ -53,8 +53,7 @@ define a helper method that will use Pillow to load the image:
                     raise ValueError(
                         'index array should only have 1 dimension, '
                         'not {}'.format(index.ndim))
-                images = [self._load_image(self.paths[i])
-                          for i in index]
+                images = [self._load_image(self.paths[i]) for i in index]
                 return np.stack(images, axis=0)
             else:
                 raise TypeError('index should be an integer or a NumPy '
@@ -123,8 +122,7 @@ Also ``__getitem__`` doesn't have to return NumPy arrays; it can return a single
                 return self._load_image(self.paths[index])
             elif isinstance(index, np.ndarray):
                 if index.ndim != 1:
-                    raise ValueError(
-                        'index array should only have 1 dimension, '
+                    raise ValueError('index array should only have 1 dimension, '
                         'not {}'.format(index.ndim))
                 return [self._load_image(self.paths[i])
                         for i in index]
