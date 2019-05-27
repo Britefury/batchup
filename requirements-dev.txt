@@ -5,3 +5,6 @@ joblib
 pytest
 six
 pytest-cov>=2.4.0,<2.6
+Sphinx
+numpydoc
+
