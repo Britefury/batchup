@@ -2,9 +2,7 @@ numpy
 tables
 scipy
 joblib
-pytest
 six
+pytest
 pytest-cov>=2.4.0,<2.6
-Sphinx
-numpydoc
 
