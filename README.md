@@ -14,6 +14,8 @@ for (batch_X, batch_y) in ds.batch_iterator(batch_size=64, shuffle=True):
     # Processes batches here...
 ```
 
+Documentation available at https://batchup.readthedocs.io/en/latest/
+
 
 # Table of Contents
 
