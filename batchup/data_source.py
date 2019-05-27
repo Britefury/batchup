@@ -176,14 +176,17 @@ class AbstractDataSource (object):
         Examples
         --------
         Define a function to apply to samples:
+
         >>> def sqr_sum(x):
         ...     return (x ** 2).sum(axis=1)
 
         Construct data to process and create a data source:
+
         >>> X = np.random.normal(size=(7, 10))
         >>> ds = ArrayDataSource([X])
 
         Apply the function defined above:
+
         >>> X_sqr_sum = ds.batch_map_concat(sqr_sum, batch_size=5)
         >>> assert (X_sqr_sum[0] == (X ** 2).sum(axis=1)).all()
         """
@@ -280,6 +283,7 @@ class AbstractDataSource (object):
 
         Define a function to compute the per-sample binary cross entropy
         loss:
+
         >>> def binary_crossentropy_loss(pred, target):
         ...     e = -target * np.log(pred) - (1 - target) * np.log(1 - pred)
         ...     return e.mean(axis=1)
@@ -288,15 +292,18 @@ class AbstractDataSource (object):
         entropy losses over the sample axis (axis 0), as the default
         behaviour of `mean_batch_map` will sum them up and divide by the
         number of samples at the end:
+
         >>> def binary_crossentropy_loss_sum(pred, target):
         ...     return binary_crossentropy_loss(pred, target).sum()
 
         Construct prediction and target data
+
         >>> pred = np.random.uniform(0.0, 1.0, size=(15, 10))
         >>> tgt = np.random.uniform(0.0, 1.0, size=(15, 10))
         >>> ds = ArrayDataSource([pred, tgt])
 
         Apply the loss sum function defined above:
+
         >>> loss = ds.batch_map_mean(binary_crossentropy_loss_sum,
         ...                          batch_size=5)
         >>> assert np.allclose(
@@ -558,6 +565,78 @@ class ArrayDataSource (RandomAccessDataSource):
     data set exactly, the last batch will containing the remaining elements
     and will be 'short'.
 
+    Examples
+    --------
+    Create a data set of size 12, where each input sample is a 7-element
+    vector and ground classifications are integers:
+
+    >>> X = np.random.normal(size=(12,7))
+    >>> y = np.random.randint(0, 10, size=(12,))
+    >>> ds = ArrayDataSource([X, y])
+
+    Iterate over data, drawing 5-element mini-batches, in order:
+
+    >>> for batch_X, batch_y in ds.batch_iterator(5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     pass
+
+    Iterate over data, drawing 5-element mini-batches, shuffled randomly
+    using a RandomState:
+
+    >>> rng = np.random.RandomState(12345)
+    >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=rng):
+    ...     # Perform operations on batch_X and batch_y
+    ...     pass
+
+    Iterate over data, drawing 5-element mini-batches, shuffled randomly
+    using NumPy's default random number generator:
+
+    >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=True):
+    ...     # Perform operations on batch_X and batch_y
+    ...     pass
+
+    Only draw from a subset of the available samples:
+
+    >>> dsi = ArrayDataSource([X, y], indices=np.random.permutation(10)[:5])
+    >>> for batch_X, batch_y in dsi.batch_iterator(5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     pass
+
+    Include the sample indices in the mini-batches:
+
+    >>> dsn = ArrayDataSource([X, y], include_indices=True)
+    >>> for batch_ndx, batch_X, batch_y in dsn.batch_iterator(5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     pass
+
+    The `repeats` parameter will cause the iterator to walk over the data
+    a specified number of times:
+
+    >>> ds_10 = ArrayDataSource([X, y], repeats=10)
+    >>> for batch_X, batch_y in ds_10.batch_iterator(5, shuffle=rng):
+    ...     # Perform operations on batch_X and batch_y
+    ...     break
+
+    If it is given the value `-1`, the iterator will repeat infinitely:
+
+    >>> import itertools
+    >>> ds_inf = ArrayDataSource([X, y], repeats=-1)
+    >>> inf_batch_iter = ds_inf.batch_iterator(5, shuffle=rng)
+    >>> for batch_X, batch_y in itertools.islice(inf_batch_iter, 5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     break
+
+    Draw samples randomly according to a sample weighting by specifying
+    a sampler:
+
+    >>> sampler = sampling.WeightedSampler(
+    ...     weights=np.array([0.1, 0.2, 0.3, 0.4]))
+    >>> ds_w = ArrayDataSource([X, y], sampler=sampler)
+    >>> inf_w_batch_iter = ds_w.batch_iterator(5, shuffle=rng)
+    >>> for batch_X, batch_y in itertools.islice(inf_w_batch_iter, 5):
+    ...     # Perform operations on batch_X and batch_y
+    ...     break
+
     Attributes
     ----------
     data: list
@@ -569,68 +648,6 @@ class ArrayDataSource (RandomAccessDataSource):
         If `True`, each mini-batch generated will be prefixed with an
         array that provides the indices of the samples that were drawn
         to make the mini-batch
-
-    Examples:
-    Create a data set of size 12, where each input sample is a 7-element
-    vector and ground classifications are integers:
-    >>> X = np.random.normal(size=(12,7))
-    >>> y = np.random.randint(0, 10, size=(12,))
-    >>> ds = ArrayDataSource([X, y])
-
-    Iterate over data, drawing 5-element mini-batches, in order:
-    >>> for batch_X, batch_y in ds.batch_iterator(5):
-    ...     # Perform operations on batch_X and batch_y
-    ...     pass
-
-    Iterate over data, drawing 5-element mini-batches, shuffled randomly
-    using a RandomState:
-    >>> rng = np.random.RandomState(12345)
-    >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=rng):
-    ...     # Perform operations on batch_X and batch_y
-    ...     pass
-
-    Iterate over data, drawing 5-element mini-batches, shuffled randomly
-    using NumPy's default random number generator:
-    >>> for batch_X, batch_y in ds.batch_iterator(5, shuffle=True):
-    ...     # Perform operations on batch_X and batch_y
-    ...     pass
-
-    Only draw from a subset of the available samples:
-    >>> dsi = ArrayDataSource([X, y], indices=np.random.permutation(10)[:5])
-    >>> for batch_X, batch_y in dsi.batch_iterator(5):
-    ...     # Perform operations on batch_X and batch_y
-    ...     pass
-
-    Include the sample indices in the mini-batches:
-    >>> dsn = ArrayDataSource([X, y], include_indices=True)
-    >>> for batch_ndx, batch_X, batch_y in dsn.batch_iterator(5):
-    ...     # Perform operations on batch_X and batch_y
-    ...     pass
-
-    The `repeats` parameter will cause the iterator to walk over the data
-    a specified number of times:
-    >>> ds_10 = ArrayDataSource([X, y], repeats=10)
-    >>> for batch_X, batch_y in ds_10.batch_iterator(5, shuffle=rng):
-    ...     # Perform operations on batch_X and batch_y
-    ...     break
-
-    If it is given the value `-1`, the iterator will repeat infinitely:
-    >>> import itertools
-    >>> ds_inf = ArrayDataSource([X, y], repeats=-1)
-    >>> inf_batch_iter = ds_inf.batch_iterator(5, shuffle=rng)
-    >>> for batch_X, batch_y in itertools.islice(inf_batch_iter, 5):
-    ...     # Perform operations on batch_X and batch_y
-    ...     break
-
-    Draw samples randomly according to a sample weighting by specifying
-    a sampler:
-    >>> sampler = sampling.WeightedSampler(
-    ...     weights=np.array([0.1, 0.2, 0.3, 0.4]))
-    >>> ds_w = ArrayDataSource([X, y], sampler=sampler)
-    >>> inf_w_batch_iter = ds_w.batch_iterator(5, shuffle=rng)
-    >>> for batch_X, batch_y in itertools.islice(inf_w_batch_iter, 5):
-    ...     # Perform operations on batch_X and batch_y
-    ...     break
     """
     def __init__(self, data, indices=None, repeats=1, sampler=None,
                  include_indices=False):
@@ -720,23 +737,28 @@ class CallableDataSource (AbstractDataSource):
     Examples
     --------
     Data to iterate over:
+
     >>> X = np.random.normal(size=(7, 10))
 
     Function to build batch iterator:
+
     >>> def make_batch_iterator(batch_size):
     ...     for i in range(0, len(X), batch_size):
     ...         yield [X[i:i + batch_size]]
 
     Data source acquiring batches from the `make_batch_iterator` function:
+
     >>> ds = CallableDataSource(make_batch_iterator)
     >>> ds.num_samples() is None
     True
 
     Iterate over batches
+
     >>> for (batch_X,) in ds.batch_iterator(5):
     ...     break
 
     We can also provide a function that computes the number of samples:
+
     >>> def num_samples_fn():
     ...     return len(X)
 
@@ -745,6 +767,7 @@ class CallableDataSource (AbstractDataSource):
     7
 
     Or, we could provide the number of samples:
+
     >>> ds = CallableDataSource(make_batch_iterator, 7)
     >>> ds.num_samples()
     7
@@ -813,27 +836,33 @@ class IteratorDataSource (AbstractDataSource):
     Examples
     --------
     Data to iterate over:
+
     >>> X = np.random.normal(size=(7, 10))
 
     Function to build batch iterator:
+
     >>> def make_batch_iterator(batch_size):
     ...     for i in range(0, len(X), batch_size):
     ...         yield (X[i:i + batch_size],)
 
     Build batch iterator:
+
     >>> batch_iter = make_batch_iterator(5)
 
     Data source acquiring batches from the `make_batch_iterator` function:
+
     >>> ds = IteratorDataSource(batch_iter)
     >>> ds.num_samples() is None
     True
 
     Iterate over batches. Note that the batch size of 3 will be *ignored*
     as the iterator was constructed above with a batch size of 5.
+
     >>> for (batch_X,) in ds.batch_iterator(3):
     ...     break
 
     We can provide the number of samples:
+
     >>> ds = IteratorDataSource(batch_iter, 7)
     >>> ds.num_samples()
     7
@@ -888,25 +917,30 @@ class CompositeDataSource (AbstractDataSource):
     set repeatedly, while iterating over the unlabeled samples once.
 
     Create 10 labeled samples:
+
     >>> lab_X = np.random.normal(size=(10, 10))
     >>> lab_y = np.random.randint(0, 10, size=(10,))
 
     Create 33 unlabeled samples:
+
     >>> unlab_X = np.random.normal(size=(33, 10))
 
     Array data sources for labeled and unlabeled samples (the labeled samples
     are repeated infinitely, allowing us to draw as many as needed):
+
     >>> lab_ds = ArrayDataSource([lab_X, lab_y], repeats=-1)
     >>> unlab_ds = ArrayDataSource([unlab_X])
 
     Create a data source that iterates repeatedly over the labeled samples
     and once over the unlabeled samples:
+
     >>> semi_ds = CompositeDataSource([
     ...     lab_ds, unlab_ds
     ... ])
 
     When we iterate over them, we get batches of the form
     `(batch_lab_X, batch_lab_y, batch_unlab_X)`:
+
     >>> for batch in semi_ds.batch_iterator(batch_size=5):
     ...     # Normally we would pass the batch to a training function, but
     ...     # we're just going to check its shape here:
@@ -918,11 +952,13 @@ class CompositeDataSource (AbstractDataSource):
 
     Alternatively, if you want structured mini-batches that have the same
     nesting structure as the composite data soruce:
+
     >>> semi_flat_ds = CompositeDataSource([
     ...     lab_ds, unlab_ds
     ... ], flatten=False)
 
     Batches of the form `((batch_lab_X, batch_lab_y), (batch_unlab_X,))`:
+
     >>> for batch in semi_flat_ds.batch_iterator(batch_size=5):
     ...     # Check the shape
     ...     assert len(batch) == 2
@@ -1094,6 +1130,7 @@ class ChoiceDataSource (AbstractDataSource):
     Create labeled samples for 3 different domains, each of a different size.
     Have the underlying `ArrayDataSource` sources repeat infinitely, so we
     can draw as many samples as necessary
+
     >>> a_X = np.random.normal(size=(10, 10))
     >>> a_y = np.random.randint(0, 10, size=(10,))
     >>> a_ds = ArrayDataSource([a_X, a_y], repeats=-1)
@@ -1108,12 +1145,14 @@ class ChoiceDataSource (AbstractDataSource):
 
     Create a data source that iterates repeatedly over the labeled samples
     and once over the unlabeled samples:
+
     >>> ch_ds = ChoiceDataSource([
     ...     a_ds, b_ds, c_ds
     ... ])
 
     When we iterate over them, we get batches of the form
     `(batch_X, batch_y)`:
+
     >>> for batch_X, batch_y in ch_ds.batch_iterator(batch_size=5):
     ...     # Normally we would pass the batch to a training function, but
     ...     # we're just going to check its shape here:
@@ -1353,11 +1392,13 @@ class MapDataSource (AbstractDataSource):
     to the samples in the mini-batch, e.g. data augmentation.
 
     Create 10 samples and a data source for iterating over them:
+
     >>> X = np.random.normal(size=(10, 10)) * 10.0 + 5.0
     >>> y = np.random.randint(0, 10, size=(10,))
     >>> ds = ArrayDataSource([X, y])
 
     Define a function for augmenting each sample in X:
+
     >>> def augment(batch_X, batch_y):
     ...     aug_shape = (len(batch_X), 1)
     ...     scale_X = np.exp(np.random.normal(size=aug_shape) * 0.1)
@@ -1366,13 +1407,16 @@ class MapDataSource (AbstractDataSource):
 
     Create a `MapDataSource` that augments each sample extracted
     from the array:
+
     >>> aug_ds = MapDataSource(ds, augment)
 
     Iterating over batches from `aug_ds`:
+
     >>> for batch in aug_ds.batch_iterator(batch_size=5):
     ...     batch_X, batch_y = batch
 
     Is equivalent to applying `augment` like so:
+
     >>> for batch in ds.batch_iterator(batch_size=5):
     ...     batch_X, batch_y = augment(*batch)
     """
@@ -1536,16 +1580,19 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
     we wish to apply. The function will receive the batches and process them.
 
     Define a function to apply to samples:
+
     >>> def sqr_sum(x):
     ...     # Ensure that we receive batches of the expected size:
     ...     assert len(x) in {5, 2}
     ...     return (x ** 2).sum(axis=1)
 
     Construct data to process and create a data source:
+
     >>> X = np.random.normal(size=(7, 10))
     >>> ds = ArrayDataSource([X])
 
     Apply the function defined above:
+
     >>> batch_iter = ds.batch_iterator(batch_size=5)
     >>> X_sqr_sum = batch_map_concat(sqr_sum, batch_iter)
     >>> assert np.allclose(X_sqr_sum[0], (X ** 2).sum(axis=1))
@@ -1555,6 +1602,7 @@ def batch_map_concat(func, batch_iter, progress_iter_func=None,
     - when the iterator generates an infinite number of samples
     - when the data set is huge and we wish to show results as we go
     Use the `n_batches` argument to limit the number of batches to process:
+
     >>> X_large = np.random.normal(size=(100, 10))
     >>> ds_large = ArrayDataSource([X_large])
     >>> iter_large = ds_large.batch_iterator(batch_size=5)
@@ -1685,6 +1733,7 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
 
     Define a function to compute the per-sample binary cross entropy
     loss:
+
     >>> def binary_crossentropy_loss(pred, target):
     ...     e = -target * np.log(pred) - (1 - target) * np.log(1 - pred)
     ...     return e.mean(axis=1)
@@ -1693,21 +1742,25 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
     entropy losses over the sample axis (axis 0), as the default
     behaviour of `mean_batch_map` will sum them up and divide by the
     number of samples at the end:
+
     >>> def binary_crossentropy_loss_sum(pred, target):
     ...     return binary_crossentropy_loss(pred, target).sum()
 
     Construct prediction and target data
+
     >>> pred = np.random.uniform(0.1, 0.9, size=(7, 10))
     >>> tgt = np.random.uniform(0.1, 0.9, size=(7, 10))
     >>> ds = ArrayDataSource([pred, tgt])
 
     Apply the loss sum function defined above:
+
     >>> batch_iter = ds.batch_iterator(batch_size=5)
     >>> loss = batch_map_mean(binary_crossentropy_loss_sum, batch_iter)
     >>> assert np.allclose(
     ...     loss, binary_crossentropy_loss(pred, tgt).mean())
 
     Have `mean_batch_map` sum over axis 0:
+
     >>> batch_iter = ds.batch_iterator(batch_size=5)
     >>> loss = batch_map_mean(binary_crossentropy_loss, batch_iter,
     ...                       sum_axis=0)
@@ -1715,6 +1768,7 @@ def batch_map_mean(func, batch_iter, progress_iter_func=None, sum_axis=None,
     ...     loss, binary_crossentropy_loss(pred, tgt).mean())
 
     Construct a large data set and use `batch
+
     >>> pred_large = np.random.uniform(0.1, 0.9, size=(100, 10))
     >>> tgt_large = np.random.uniform(0.1, 0.9, size=(100, 10))
     >>> ds_large = ArrayDataSource([pred_large, tgt_large])
