@@ -45,8 +45,8 @@ To draw from a subset of the dataset, use :py:class:`.WeightedSubsetSampler`:
 
     # NOTE that the weights parameter is called `sub_weights` (rather
     # than `weights`) and that it must have the same length as `indices`.
-    sampler = sampling.WeightedSubsetSampler(
-        sub_weights=train_w[subset_a], indices=subset_a)
+    sampler = sampling.WeightedSubsetSampler(sub_weights=train_w[subset_a],
+                                             indices=subset_a)
 
     ds = data_source.ArrayDataSource([train_X, train_y], sampler=sampler)
 

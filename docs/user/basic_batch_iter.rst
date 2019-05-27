@@ -62,8 +62,7 @@ We can specify the indices of a subset of the samples in a dataset and draw mini
     subset_a = np.random.permutation(len(train_X))[:20000]
 
     # Construct an array data source that will only draw samples whose indices are in `subset_a`
-    ds = data_source.ArrayDataSource([train_X, train_y],
-                                     indices=subset_a)
+    ds = data_source.ArrayDataSource([train_X, train_y], indices=subset_a)
 
     # Drawing batches of 64 elements in random order
     for (batch_X, batch_y) in ds.batch_iterator(
@@ -95,8 +94,7 @@ the end. Provide a value for the ``repeats`` argument of the :py:class:`.ArrayDa
 
 .. code:: python
 
-    ds_times_5 = data_source.ArrayDataSource([train_X, train_y],
-                                             repeats=5)
+    ds_times_5 = data_source.ArrayDataSource([train_X, train_y], repeats=5)
 
 Now use the :py:meth:`~.RandomAccessDataSource.batch_iterator` method as before.
 
