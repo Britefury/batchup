@@ -2559,6 +2559,72 @@ def test_ChoiceDataSource_samples_by_indices():
         ch_ds.samples_by_indices([0, np.arange(5)])
 
 
+def test_ChoiceDataSource_in_CompositeDataSource():
+    from batchup import data_source
+
+    a_X = np.arange(120).reshape((40, 3))
+    b_X = np.arange(60).reshape((20, 3)) * 1000
+    c_X = np.arange(30).reshape((10, 3)) * 100000
+    d_X = np.arange(15).reshape((5, 3)) * 10000000
+    e_X = np.arange(105).reshape((35, 3)) * 1000000000
+    a_ds = data_source.ArrayDataSource([a_X])
+    b_ds = data_source.ArrayDataSource([b_X])
+    c_ds = data_source.ArrayDataSource([c_X])
+    d_ds = data_source.ArrayDataSource([d_X])
+    e_ds = data_source.ArrayDataSource([e_X])
+
+    # Not-stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+    c_ds = data_source.CompositeDataSource([ch_ds, e_ds])
+
+    # In order batches
+    batches = list(c_ds.batch_iterator(5))
+    assert len(batches) == 7
+
+    assert (batches[0][0] == a_X[:5]).all()
+    assert (batches[0][1] == e_X[:5]).all()
+    assert (batches[1][0] == b_X[:5]).all()
+    assert (batches[1][1] == e_X[5:10]).all()
+    assert (batches[2][0] == c_X[:5]).all()
+    assert (batches[2][1] == e_X[10:15]).all()
+    assert (batches[3][0] == d_X[:5]).all()
+    assert (batches[3][1] == e_X[15:20]).all()
+    assert (batches[4][0] == a_X[5:10]).all()
+    assert (batches[4][1] == e_X[20:25]).all()
+    assert (batches[5][0] == b_X[5:10]).all()
+    assert (batches[5][1] == e_X[25:30]).all()
+    assert (batches[6][0] == c_X[5:10]).all()
+    assert (batches[6][1] == e_X[30:35]).all()
+
+    # In order index batches
+    batches = list(c_ds.batch_indices_iterator(5))
+    assert len(batches) == 7
+
+    print(batches[0])
+
+    assert batches[0][0][0] == 0
+    assert batches[1][0][0] == 1
+    assert batches[2][0][0] == 2
+    assert batches[3][0][0] == 3
+    assert batches[4][0][0] == 0
+    assert batches[5][0][0] == 1
+    assert batches[6][0][0] == 2
+    assert (batches[0][0][1] == np.arange(5)).all()
+    assert (batches[1][0][1] == np.arange(5)).all()
+    assert (batches[2][0][1] == np.arange(5)).all()
+    assert (batches[3][0][1] == np.arange(5)).all()
+    assert (batches[4][0][1] == np.arange(5, 10)).all()
+    assert (batches[5][0][1] == np.arange(5, 10)).all()
+    assert (batches[6][0][1] == np.arange(5, 10)).all()
+    assert (batches[0][1] == np.arange(0, 5)).all()
+    assert (batches[1][1] == np.arange(5, 10)).all()
+    assert (batches[2][1] == np.arange(10, 15)).all()
+    assert (batches[3][1] == np.arange(15, 20)).all()
+    assert (batches[4][1] == np.arange(20, 25)).all()
+    assert (batches[5][1] == np.arange(25, 30)).all()
+    assert (batches[6][1] == np.arange(30, 35)).all()
+
+
 def test_MapDataSource():
     from batchup import data_source
 
