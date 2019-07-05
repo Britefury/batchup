@@ -1119,6 +1119,10 @@ class CompositeDataSource (AbstractDataSource):
             yield self._prepare_index_batch(batch)
 
 
+ChoiceBatch = collections.namedtuple('ChoiceBatch',
+                                     ['sample_indices', 'ds_index'])
+
+
 class ChoiceDataSource (AbstractDataSource):
     """A data source that chooses batches from a number of member
     data sources. Each mini-batch is drawn from one member source.
@@ -1191,7 +1195,7 @@ class ChoiceDataSource (AbstractDataSource):
         iterators = [d.batch_iterator(batch_size, shuffle=shuffle, **kwargs)
                      for d in self.datasets]
         shuffle_rng = self._get_shuffle_rng(shuffle)
-        for _, x in self._ds_iterator(batch_size, iterators, shuffle_rng,
+        for x, _ in self._ds_iterator(batch_size, iterators, shuffle_rng,
                                       **kwargs):
             yield x
 
@@ -1216,11 +1220,11 @@ class ChoiceDataSource (AbstractDataSource):
             raise TypeError('samples_by_indices_nomapping method not '
                             'supported as one or more of the underlying '
                             'data sources does not support random access')
-        if not isinstance(indices, tuple):
-            raise TypeError('indices should be a tuple, not a {}'.format(
-                type(indices)
-            ))
-        dataset_index, sample_indices = indices
+        if not isinstance(indices, ChoiceBatch):
+            raise TypeError('indices should be a _ChoiceBatch, '
+                            'not a {}'.format(type(indices)))
+        dataset_index = indices.ds_index
+        sample_indices = indices.sample_indices
         ds = self.datasets[dataset_index]
         return ds.samples_by_indices_nomapping(sample_indices)
 
@@ -1231,7 +1235,7 @@ class ChoiceDataSource (AbstractDataSource):
 
         Parameters
         ----------
-        indices: a tuple of the form `(dataset_index, sample_indices)`
+        indices: _ChoiceBatch
             The `dataset_index` identifies the dataset from which to draw
             samples while `sample_indices` identifies the samples to draw
             from it.
@@ -1245,11 +1249,11 @@ class ChoiceDataSource (AbstractDataSource):
             raise TypeError('samples_by_indices method not supported as one '
                             'or more of the underlying data sources does '
                             'not support random access')
-        if not isinstance(indices, tuple):
-            raise TypeError('indices should be a tuple, not a {}'.format(
-                type(indices)
-            ))
-        dataset_index, sample_indices = indices
+        if not isinstance(indices, ChoiceBatch):
+            raise TypeError('indices should be a _ChoiceBatch, '
+                            'not a {}'.format(type(indices)))
+        dataset_index = indices.ds_index
+        sample_indices = indices.sample_indices
         ds = self.datasets[dataset_index]
         return ds.samples_by_indices(sample_indices)
 
@@ -1312,7 +1316,7 @@ class ChoiceDataSource (AbstractDataSource):
             for ds_i in ds_indices:
                 iterator = iterators[ds_i]
                 x = next(iterator)
-                yield (ds_i, x)
+                yield ChoiceBatch(sample_indices=x, ds_index=ds_i)
         else:
             # Not stratified
             if shuffle_rng is not None:
@@ -1328,7 +1332,7 @@ class ChoiceDataSource (AbstractDataSource):
                         except StopIteration:
                             running = False
                             break
-                        yield (ds_i, x)
+                        yield ChoiceBatch(sample_indices=x, ds_index=ds_i)
             else:
                 # In order; choose a batch from each dataset in turn,
                 # cyclically until one of them is exhausted
@@ -1340,7 +1344,7 @@ class ChoiceDataSource (AbstractDataSource):
                         except StopIteration:
                             running = False
                             break
-                        yield (ds_i, x)
+                        yield ChoiceBatch(sample_indices=x, ds_index=ds_i)
 
     @staticmethod
     def _ds_indices_stratified_in_order(batches_per_ds):
