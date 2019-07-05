@@ -29,7 +29,8 @@ setup(
     name="batchup",
     version=version,
     description="Python library for extracting mini-batches of data from a data source for the purpose of training neural networks",
-    long_description="\n\n".join([README]),
+    long_description=README,
+    long_description_content_type="text/markdown",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
