@@ -2218,10 +2218,12 @@ def test_ChoiceDataSource():
 
     # Methods that require random access should not work
     with pytest.raises(TypeError):
-        ch_call_ds.samples_by_indices((0, np.arange(5)))
+        ch_call_ds.samples_by_indices(
+            data_source.ChoiceBatch(np.arange(5), 0))
 
     with pytest.raises(TypeError):
-        ch_call_ds.samples_by_indices_nomapping((0, np.arange(5)))
+        ch_call_ds.samples_by_indices_nomapping(
+            data_source.ChoiceBatch(np.arange(5), 0))
 
     with pytest.raises(TypeError):
         ch_call_ds.batch_indices_iterator(batch_size=5, shuffle=True)
@@ -2289,13 +2291,13 @@ def test_ChoiceDataSource_ds_iterator_not_stratified():
     # In-order
     batches = list(ch_ds._ds_iterator(5, make_iters(), None))
     assert len(batches) == 7
-    assert batches[0] == (0, 0)
-    assert batches[1] == (1, 0)
-    assert batches[2] == (2, 0)
-    assert batches[3] == (3, 0)
-    assert batches[4] == (0, 1)
-    assert batches[5] == (1, 1)
-    assert batches[6] == (2, 1)
+    assert batches[0] == data_source.ChoiceBatch(0, 0)
+    assert batches[1] == data_source.ChoiceBatch(0, 1)
+    assert batches[2] == data_source.ChoiceBatch(0, 2)
+    assert batches[3] == data_source.ChoiceBatch(0, 3)
+    assert batches[4] == data_source.ChoiceBatch(1, 0)
+    assert batches[5] == data_source.ChoiceBatch(1, 1)
+    assert batches[6] == data_source.ChoiceBatch(1, 2)
 
     # Shuffled
     shuffle_rng = np.random.RandomState(12345)
@@ -2313,7 +2315,8 @@ def test_ChoiceDataSource_ds_iterator_not_stratified():
     expected_batches = []
     for j in range(2):
         for i in range(4):
-            expected_batches.append((ds_order[j*4+i], j))
+            expected_batches.append(
+                data_source.ChoiceBatch(j, ds_order[j*4+i]))
 
     assert batches == expected_batches[:stop_at]
 
@@ -2337,23 +2340,24 @@ def test_ChoiceDataSource_ds_iterator_stratified():
 
     # In-order
     batches = list(ch_ds._ds_iterator(5, make_iters(), None))
-    assert batches == [(0, 0), (1, 0), (2, 0), (3, 0),
-                       (0, 1),
-                       (0, 2), (1, 1),
-                       (0, 3),
-                       (0, 4), (1, 2), (2, 1),
-                       (0, 5),
-                       (0, 6), (1, 3),
-                       (0, 7)]
+    assert batches == [(0, 0), (0, 1), (0, 2), (0, 3),
+                       (1, 0),
+                       (2, 0), (1, 1),
+                       (3, 0),
+                       (4, 0), (2, 1), (1, 2),
+                       (5, 0),
+                       (6, 0), (3, 1),
+                       (7, 0)]
 
     # Shuffled
     shuffle_rng = np.random.RandomState(12345)
     batches = list(ch_ds._ds_iterator(5, make_iters(), shuffle_rng))
-    # Convert to list of lists
+    # Convert to list of lists and wrap in array
     arr_batches = np.array([list(x) for x in batches])
     for i in range(len(arr_batches)):
-        hist = np.bincount(arr_batches[:i+1, 0], minlength=4)
-        assert hist[arr_batches[i, 0]] == arr_batches[i, 1] + 1
+        # Compute histogram of the data sources chosen
+        hist = np.bincount(arr_batches[:i+1, 1], minlength=4)
+        assert hist[arr_batches[i, 1]] == arr_batches[i, 0] + 1
 
 
 def test_ChoiceDataSource_batch_iterator():
@@ -2429,20 +2433,20 @@ def test_ChoiceDataSource_batch_indices_iterator():
 
     print(batches[0])
 
-    assert batches[0][0] == 0
-    assert batches[1][0] == 1
-    assert batches[2][0] == 2
-    assert batches[3][0] == 3
-    assert batches[4][0] == 0
-    assert batches[5][0] == 1
-    assert batches[6][0] == 2
-    assert (batches[0][1] == np.arange(5)).all()
-    assert (batches[1][1] == np.arange(5)).all()
-    assert (batches[2][1] == np.arange(5)).all()
-    assert (batches[3][1] == np.arange(5)).all()
-    assert (batches[4][1] == np.arange(5, 10)).all()
-    assert (batches[5][1] == np.arange(5, 10)).all()
-    assert (batches[6][1] == np.arange(5, 10)).all()
+    assert batches[0].ds_index == 0
+    assert batches[1].ds_index == 1
+    assert batches[2].ds_index == 2
+    assert batches[3].ds_index == 3
+    assert batches[4].ds_index == 0
+    assert batches[5].ds_index == 1
+    assert batches[6].ds_index == 2
+    assert (batches[0].sample_indices == np.arange(5)).all()
+    assert (batches[1].sample_indices == np.arange(5)).all()
+    assert (batches[2].sample_indices == np.arange(5)).all()
+    assert (batches[3].sample_indices == np.arange(5)).all()
+    assert (batches[4].sample_indices == np.arange(5, 10)).all()
+    assert (batches[5].sample_indices == np.arange(5, 10)).all()
+    assert (batches[6].sample_indices == np.arange(5, 10)).all()
 
     # Stratified
     ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds],
@@ -2452,36 +2456,36 @@ def test_ChoiceDataSource_batch_indices_iterator():
     batches = list(ch_ds.batch_indices_iterator(5))
     assert len(batches) == 15
 
-    assert batches[0][0] == 0
-    assert batches[1][0] == 1
-    assert batches[2][0] == 2
-    assert batches[3][0] == 3
-    assert batches[4][0] == 0
-    assert batches[5][0] == 0
-    assert batches[6][0] == 1
-    assert batches[7][0] == 0
-    assert batches[8][0] == 0
-    assert batches[9][0] == 1
-    assert batches[10][0] == 2
-    assert batches[11][0] == 0
-    assert batches[12][0] == 0
-    assert batches[13][0] == 1
-    assert batches[14][0] == 0
-    assert (batches[0][1] == np.arange(5)).all()
-    assert (batches[1][1] == np.arange(5)).all()
-    assert (batches[2][1] == np.arange(5)).all()
-    assert (batches[3][1] == np.arange(5)).all()
-    assert (batches[4][1] == np.arange(5, 10)).all()
-    assert (batches[5][1] == np.arange(10, 15)).all()
-    assert (batches[6][1] == np.arange(5, 10)).all()
-    assert (batches[7][1] == np.arange(15, 20)).all()
-    assert (batches[8][1] == np.arange(20, 25)).all()
-    assert (batches[9][1] == np.arange(10, 15)).all()
-    assert (batches[10][1] == np.arange(5, 10)).all()
-    assert (batches[11][1] == np.arange(25, 30)).all()
-    assert (batches[12][1] == np.arange(30, 35)).all()
-    assert (batches[13][1] == np.arange(15, 20)).all()
-    assert (batches[14][1] == np.arange(35, 40)).all()
+    assert batches[0].ds_index == 0
+    assert batches[1].ds_index == 1
+    assert batches[2].ds_index == 2
+    assert batches[3].ds_index == 3
+    assert batches[4].ds_index == 0
+    assert batches[5].ds_index == 0
+    assert batches[6].ds_index == 1
+    assert batches[7].ds_index == 0
+    assert batches[8].ds_index == 0
+    assert batches[9].ds_index == 1
+    assert batches[10].ds_index == 2
+    assert batches[11].ds_index == 0
+    assert batches[12].ds_index == 0
+    assert batches[13].ds_index == 1
+    assert batches[14].ds_index == 0
+    assert (batches[0].sample_indices == np.arange(5)).all()
+    assert (batches[1].sample_indices == np.arange(5)).all()
+    assert (batches[2].sample_indices == np.arange(5)).all()
+    assert (batches[3].sample_indices == np.arange(5)).all()
+    assert (batches[4].sample_indices == np.arange(5, 10)).all()
+    assert (batches[5].sample_indices == np.arange(10, 15)).all()
+    assert (batches[6].sample_indices == np.arange(5, 10)).all()
+    assert (batches[7].sample_indices == np.arange(15, 20)).all()
+    assert (batches[8].sample_indices == np.arange(20, 25)).all()
+    assert (batches[9].sample_indices == np.arange(10, 15)).all()
+    assert (batches[10].sample_indices == np.arange(5, 10)).all()
+    assert (batches[11].sample_indices == np.arange(25, 30)).all()
+    assert (batches[12].sample_indices == np.arange(30, 35)).all()
+    assert (batches[13].sample_indices == np.arange(15, 20)).all()
+    assert (batches[14].sample_indices == np.arange(35, 40)).all()
 
 
 def test_ChoiceDataSource_samples_by_indices_no_mapping():
@@ -2498,21 +2502,24 @@ def test_ChoiceDataSource_samples_by_indices_no_mapping():
 
     ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
 
-    assert (ch_ds.samples_by_indices_nomapping((0, np.arange(5))) ==
-            a_X[:5]).all()
-    assert (ch_ds.samples_by_indices_nomapping((1, np.arange(5))) ==
-            b_X[:5]).all()
-    assert (ch_ds.samples_by_indices_nomapping((2, np.arange(5))) ==
-            c_X[:5]).all()
-    assert (ch_ds.samples_by_indices_nomapping((3, np.arange(5))) ==
-            d_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 0)) == a_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 1)) == b_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 2)) == c_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 3)) == d_X[:5]).all()
 
-    # Should only accept tuple
+    # Should only accept data_source.ChoiceBatch
     with pytest.raises(TypeError):
         ch_ds.samples_by_indices_nomapping(np.arange(5))
 
     with pytest.raises(TypeError):
-        ch_ds.samples_by_indices_nomapping([0, np.arange(5)])
+        ch_ds.samples_by_indices_nomapping([np.arange(5), 0])
+
+    with pytest.raises(TypeError):
+        ch_ds.samples_by_indices_nomapping((np.arange(5), 0))
 
 
 def test_ChoiceDataSource_samples_by_indices():
@@ -2533,30 +2540,99 @@ def test_ChoiceDataSource_samples_by_indices():
 
     ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
 
-    assert (ch_ds.samples_by_indices_nomapping((0, np.arange(5))) ==
-            a_X[:5]).all()
-    assert (ch_ds.samples_by_indices_nomapping((1, np.arange(5))) ==
-            b_X[:5]).all()
-    assert (ch_ds.samples_by_indices_nomapping((2, np.arange(5))) ==
-            c_X[:5]).all()
-    assert (ch_ds.samples_by_indices_nomapping((3, np.arange(5))) ==
-            d_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 0)) == a_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 1)) == b_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 2)) == c_X[:5]).all()
+    assert (ch_ds.samples_by_indices_nomapping(
+        data_source.ChoiceBatch(np.arange(5), 3)) == d_X[:5]).all()
 
-    assert (ch_ds.samples_by_indices((0, np.arange(5))) ==
-            a_X[a_inds[:5]]).all()
-    assert (ch_ds.samples_by_indices((1, np.arange(5))) ==
-            b_X[b_inds[:5]]).all()
-    assert (ch_ds.samples_by_indices((2, np.arange(5))) ==
-            c_X[c_inds[:5]]).all()
-    assert (ch_ds.samples_by_indices((3, np.arange(5))) ==
-            d_X[d_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices(
+        data_source.ChoiceBatch(np.arange(5), 0)) == a_X[a_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices(
+        data_source.ChoiceBatch(np.arange(5), 1)) == b_X[b_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices(
+        data_source.ChoiceBatch(np.arange(5), 2)) == c_X[c_inds[:5]]).all()
+    assert (ch_ds.samples_by_indices(
+        data_source.ChoiceBatch(np.arange(5), 3)) == d_X[d_inds[:5]]).all()
 
-    # Should only accept tuple
+    # Should only accept data_source.ChoiceBatch
     with pytest.raises(TypeError):
         ch_ds.samples_by_indices(np.arange(5))
 
     with pytest.raises(TypeError):
-        ch_ds.samples_by_indices([0, np.arange(5)])
+        ch_ds.samples_by_indices([np.arange(5), 0])
+
+    with pytest.raises(TypeError):
+        ch_ds.samples_by_indices((np.arange(5), 0))
+
+
+def test_ChoiceDataSource_in_CompositeDataSource():
+    from batchup import data_source
+
+    a_X = np.arange(120).reshape((40, 3))
+    b_X = np.arange(60).reshape((20, 3)) * 1000
+    c_X = np.arange(30).reshape((10, 3)) * 100000
+    d_X = np.arange(15).reshape((5, 3)) * 10000000
+    e_X = np.arange(105).reshape((35, 3)) * 1000000000
+    a_ds = data_source.ArrayDataSource([a_X])
+    b_ds = data_source.ArrayDataSource([b_X])
+    c_ds = data_source.ArrayDataSource([c_X])
+    d_ds = data_source.ArrayDataSource([d_X])
+    e_ds = data_source.ArrayDataSource([e_X])
+
+    # Not-stratified
+    ch_ds = data_source.ChoiceDataSource([a_ds, b_ds, c_ds, d_ds])
+    c_ds = data_source.CompositeDataSource([ch_ds, e_ds])
+
+    # In order batches
+    batches = list(c_ds.batch_iterator(5))
+    assert len(batches) == 7
+
+    assert (batches[0][0] == a_X[:5]).all()
+    assert (batches[0][1] == e_X[:5]).all()
+    assert (batches[1][0] == b_X[:5]).all()
+    assert (batches[1][1] == e_X[5:10]).all()
+    assert (batches[2][0] == c_X[:5]).all()
+    assert (batches[2][1] == e_X[10:15]).all()
+    assert (batches[3][0] == d_X[:5]).all()
+    assert (batches[3][1] == e_X[15:20]).all()
+    assert (batches[4][0] == a_X[5:10]).all()
+    assert (batches[4][1] == e_X[20:25]).all()
+    assert (batches[5][0] == b_X[5:10]).all()
+    assert (batches[5][1] == e_X[25:30]).all()
+    assert (batches[6][0] == c_X[5:10]).all()
+    assert (batches[6][1] == e_X[30:35]).all()
+
+    # In order index batches
+    batches = list(c_ds.batch_indices_iterator(5))
+    assert len(batches) == 7
+
+    print(batches[0])
+
+    assert batches[0][0].ds_index == 0
+    assert batches[1][0].ds_index == 1
+    assert batches[2][0].ds_index == 2
+    assert batches[3][0].ds_index == 3
+    assert batches[4][0].ds_index == 0
+    assert batches[5][0].ds_index == 1
+    assert batches[6][0].ds_index == 2
+    assert (batches[0][0].sample_indices == np.arange(5)).all()
+    assert (batches[1][0].sample_indices == np.arange(5)).all()
+    assert (batches[2][0].sample_indices == np.arange(5)).all()
+    assert (batches[3][0].sample_indices == np.arange(5)).all()
+    assert (batches[4][0].sample_indices == np.arange(5, 10)).all()
+    assert (batches[5][0].sample_indices == np.arange(5, 10)).all()
+    assert (batches[6][0].sample_indices == np.arange(5, 10)).all()
+    assert (batches[0][1] == np.arange(0, 5)).all()
+    assert (batches[1][1] == np.arange(5, 10)).all()
+    assert (batches[2][1] == np.arange(10, 15)).all()
+    assert (batches[3][1] == np.arange(15, 20)).all()
+    assert (batches[4][1] == np.arange(20, 25)).all()
+    assert (batches[5][1] == np.arange(25, 30)).all()
+    assert (batches[6][1] == np.arange(30, 35)).all()
 
 
 def test_MapDataSource():
