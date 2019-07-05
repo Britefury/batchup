@@ -2612,20 +2612,20 @@ def test_ChoiceDataSource_in_CompositeDataSource():
 
     print(batches[0])
 
-    assert batches[0][0][0] == 0
-    assert batches[1][0][0] == 1
-    assert batches[2][0][0] == 2
-    assert batches[3][0][0] == 3
-    assert batches[4][0][0] == 0
-    assert batches[5][0][0] == 1
-    assert batches[6][0][0] == 2
-    assert (batches[0][0][1] == np.arange(5)).all()
-    assert (batches[1][0][1] == np.arange(5)).all()
-    assert (batches[2][0][1] == np.arange(5)).all()
-    assert (batches[3][0][1] == np.arange(5)).all()
-    assert (batches[4][0][1] == np.arange(5, 10)).all()
-    assert (batches[5][0][1] == np.arange(5, 10)).all()
-    assert (batches[6][0][1] == np.arange(5, 10)).all()
+    assert batches[0][0].ds_index == 0
+    assert batches[1][0].ds_index == 1
+    assert batches[2][0].ds_index == 2
+    assert batches[3][0].ds_index == 3
+    assert batches[4][0].ds_index == 0
+    assert batches[5][0].ds_index == 1
+    assert batches[6][0].ds_index == 2
+    assert (batches[0][0].sample_indices == np.arange(5)).all()
+    assert (batches[1][0].sample_indices == np.arange(5)).all()
+    assert (batches[2][0].sample_indices == np.arange(5)).all()
+    assert (batches[3][0].sample_indices == np.arange(5)).all()
+    assert (batches[4][0].sample_indices == np.arange(5, 10)).all()
+    assert (batches[5][0].sample_indices == np.arange(5, 10)).all()
+    assert (batches[6][0].sample_indices == np.arange(5, 10)).all()
     assert (batches[0][1] == np.arange(0, 5)).all()
     assert (batches[1][1] == np.arange(5, 10)).all()
     assert (batches[2][1] == np.arange(10, 15)).all()
